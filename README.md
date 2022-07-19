@@ -1,5 +1,4 @@
 # Veracode
-Exemplos de codigo para implementações Veracode em algumas plataforma</br>
 A Veracode oferece as soluções e serviços de segurança de aplicativos que permite o desenvolvimento e a implementação segura dos softwares que impulsionam a economia dos aplicativos.</br>
 A plataforma unificada avalia e melhora o desempenho dos aplicativos desde o início até a produção, uma combinação entre automatização, processo e velocidade, avaliando o ciclo de vida do software e eliminando o atrito que surge quando a segurança é separada do processo de desenvolvimento e implementação.</br>
 
