@@ -1,6 +1,6 @@
 # Veracode
-A Veracode oferece as soluções e serviços de segurança de aplicativos que permite o desenvolvimento e a implementação segura dos softwares que impulsionam a economia dos aplicativos.</br>
-A plataforma unificada avalia e melhora o desempenho dos aplicativos desde o início até a produção, uma combinação entre automatização, processo e velocidade, avaliando o ciclo de vida do software e eliminando o atrito que surge quando a segurança é separada do processo de desenvolvimento e implementação.</br>
+A Veracode é um parceiro AppSec líder na criação de software seguro, reduzindo o risco de violação de segurança e aumentando a produtividade das equipes de segurança e desenvolvimento. Como resultado, as empresas que usam Veracode podem levar seus negócios e o mundo adiante.</br>
+Com sua combinação de automação de processos, integrações, velocidade e capacidade de resposta, a Veracode ajuda as empresas a obter resultados precisos e confiáveis para concentrar seus esforços na correção, não apenas na descoberta de possíveis vulnerabilidades. Saiba mais em: </br>
 
 <p align="left">
   <a href="https://www.instagram.com/veracode/" alt="Instagram">
