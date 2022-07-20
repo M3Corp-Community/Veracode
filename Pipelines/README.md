@@ -21,5 +21,4 @@ Para conseguirmos extrair o melhor da ferramenta, precisamos segui-lo:</br>
 ## Dicas de otimização
 As ferramentas podem ser utilizadas em conjunto, buscando otimizar o processo</br>
 Paralelizar o build com o SCA é bem interessante</br>
-Só o SAST já faz de forma unificada os dois tipos de scans, mas ao usar o SCA e o Pipeline Scan</br>
-Vai conseguir ter os resultados no LOG, o que pode ser bem util</br>
+Só o SAST já faz de forma unificada os dois tipos de scans, mas ao usar o SCA e o Pipeline Scan vai conseguir ter os resultados no LOG, o que pode ser bem util
