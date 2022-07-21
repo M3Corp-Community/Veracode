@@ -10,3 +10,15 @@ Saiba mais em: </br>
     <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white&link=https://www.linkedin.com/company/veracode/"/>
   </a>
 </p>
+
+## Sobre esse REPO
+Aqui vai encontrar diversos exemplos e tutoriais sobre Veracode criados pela equipe da M3Corp</br>
+Em [Pipelines](https://github.com/M3Corp-Community/Veracode/tree/main/Pipelines) encontrara exemplos de implementação em diversas ferramentas de CI/CD</br>
+Também temos uma seção para aprender como iniciar os scans pelo terminal do [SO](https://github.com/M3Corp-Community/Veracode/tree/main/SOs) e como [gerenciar usuários](https://github.com/M3Corp-Community/Veracode/tree/main/User%20Management)</br>
+Caso prefira algo mais visual, criamos alguns tutoriais em [PDF](https://github.com/M3Corp-Community/Veracode/tree/main/Guias%20em%20PDF) com todos os passos para iniciar a implementação de Veracode</br>
+
+## Se interessou por Veracode?
+Entre em contato com a nossa equipe para saber mais sobre o produto:</br>
+- [Linkedin](https://www.linkedin.com/company/m3corp/mycompany/)
+- [Site](https://www.m3corp.com.br/contato/)
+- [Email](mailto:prevendas@m3corp.com.br?Subject:[Veracode]%20Mais%20informações)
