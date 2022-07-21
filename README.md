@@ -18,7 +18,7 @@ Também temos uma seção para aprender como iniciar os scans pelo terminal do [
 Caso prefira algo mais visual, criamos alguns tutoriais em [PDF](https://github.com/M3Corp-Community/Veracode/tree/main/Guias%20em%20PDF) com todos os passos para iniciar a implementação de Veracode</br>
 
 ## Se interessou por Veracode?
-Entre em contato com a nossa equipe para saber mais sobre o produto:</br>
+Entre em contato com a nossa equipe para saber sobre como a Veracode pode ajudar seu negocio:</br>
 - [Linkedin](https://www.linkedin.com/company/m3corp/mycompany/)
 - [Site](https://www.m3corp.com.br/contato/)
 - [Email](mailto:prevendas@m3corp.com.br)
