@@ -30,7 +30,6 @@ sast:
     image: veracode/api-wrapper-java
     stage: SAST
     script:
-        - >
         - java -jar /opt/veracode/api-wrapper.jar
           -action UploadAndScan
           -vid "${VeracodeID}"
@@ -41,8 +40,6 @@ sast:
           -criticality VeryHigh
           -filepath $Caminho_Arquivo
           -version "${CI_JOB_ID}"
-        - sleep 2
-        - echo Finish scan
     dependencies:
         - packaging
 
