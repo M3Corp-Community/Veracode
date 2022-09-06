@@ -1,0 +1,9 @@
+{
+  "schedule": {
+    "now": true,
+    "duration": {
+      "length": 2,
+      "unit": "DAY"
+    }
+  }
+}
