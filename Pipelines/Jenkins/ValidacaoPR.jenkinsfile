@@ -1,0 +1,54 @@
+pipeline {
+    agent any
+    
+    environment {
+        VeracodeProfile = 'Jenkins.ValidacaoPR'
+        CaminhoPacote = 'target/verademo.war'
+    }
+
+    stages {
+        stage('Configuracoes Iniciais') {
+            parallel {
+                stage('Git Clone') {
+                    steps {
+                        git "https://github.com/IGDEXE/Verademo"
+                    }
+                }
+                stage('Download Veracode Tools'){
+                    steps {
+                        sh 'echo Donwload Veracode Pipeline Scan'
+                        sh 'curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip'
+                        sh 'unzip -o pipeline-scan-LATEST.zip'
+                    }
+                }
+            }
+        }
+        stage('Build') {
+            parallel {
+                stage('MVN'){
+                    steps {
+                        sh 'mvn -B -DskipTests clean package'
+                    }
+                }
+                stage('SCA') {
+                    steps {
+                        withCredentials([string(credentialsId: '3bc33950-df7e-4af9-8895-5eeae1fff0d3', variable: 'SRCCLR_API_TOKEN')]) {
+                            sh 'curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan --allow-dirty'
+                        }
+                    }
+                }
+            }
+        }
+        stage('Veracode SAST') {
+            parallel {
+                stage('Pipeline Scan'){
+                    steps {
+                        withCredentials([usernamePassword(credentialsId: '2d28cc05-036b-4f2c-bee5-f0c1c8691cd7', passwordVariable: 'VeracodeKey', usernameVariable: 'VeracodeID')]) {
+                            sh 'java -jar pipeline-scan.jar -vid ${VeracodeID} -vkey ${VeracodeKey} -f ${CaminhoPacote} --issue_details true '
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
