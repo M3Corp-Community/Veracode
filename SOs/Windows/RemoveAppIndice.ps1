@@ -9,14 +9,14 @@ if ($validador -ne "True") {
     Remove-Item -Path VeracodeAPI.zip
 }
 
-# Define um prefixo para validação do nome e o indice
-$validadorNome = "DELETAR"
-[int]$indice = 0
-
-# Recebe a lista de todos os nomes
+# Recebe a lista de todos os nomes e IDs
 [xml]$listaPerfisApp = $(./VeracodeAPI.exe -action GetAppList)
 $nomesApps = $listaPerfisApp.applist.app.app_name
 $idApps = $listaPerfisApp.applist.app.app_id
+
+# Define um prefixo para validação do nome e o indice
+$validadorNome = "DELETAR"
+[int]$indice = 0
 
 # Valida se existe algum nome com o prefixo
 foreach ($nomeApp in $nomesApps) {
