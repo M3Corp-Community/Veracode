@@ -1,0 +1,28 @@
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: $(Build.Repository.Name)
+  enableCustomProcessTemplate: true
+  customWorkItemType: "Issue"
+  customPTActiveStatus: "Working"
+  customPTNewStatus: "New"
+  customPTResolvedStatus: "Fixed"
+  customPTCloseStatus: "Closed"
+
+steps:
+- task: Veracode Flaw Importer@3
+  inputs:
+    ConnectionDetailsSelection: 'Endpoint'
+    AnalysisService: 'Veracode'
+    veracodeAppProfile: '$(veracodeAppProfile)'
+    scanType: 'Dynamic, Static, and Software Composition Analysis'
+    importType: 'All Unmitigated Flaws Violating Policy'
+    workItemType: 'Issue'
+    area: '$(system.teamProject)'
+    overwriteAreaPathInWorkItemsOnImport: true
+    flawImportLimit: '1000'
+  displayName: 'Veracode importando falhas'
