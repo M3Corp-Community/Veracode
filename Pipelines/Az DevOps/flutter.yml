@@ -1,4 +1,4 @@
-# Exemplo de pipeline para Flutter/Dart
+# Exemplo de pipeline para projetos em Flutter/Dart 
 # Projeto: https://github.com/IGDEXE/secDevLabs/tree/master/owasp-top10-2016-mobile/m5/panda_zap
 
 trigger:
