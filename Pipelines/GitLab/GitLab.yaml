@@ -26,7 +26,7 @@ sca:
             - curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor
 
 # Inicia a analise SAST por meio do Wrapper
-sast:
+Wrapper:
     image: veracode/api-wrapper-java
     stage: SAST
     script:
