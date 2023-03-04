@@ -1,0 +1,27 @@
+# O script PS1 está na seção de SOs/Windows
+trigger:
+- main
+
+variables:
+- group: Veracode-DAST
+- name: veracodeAppName
+  value: MSDN.Gruyere
+
+pool:
+  vmImage: windows-latest
+
+steps:
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      pip install httpie
+      pip install veracode-api-signing
+  displayName: 'Install Requerements'
+
+- task: PowerShell@2
+  inputs:
+    filePath: 'DAST-Results.ps1'
+    arguments: '$(veracodeAppName)'
+    showWarnings: true
+  displayName: 'Resultados DAST'
