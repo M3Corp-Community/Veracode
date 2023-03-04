@@ -17,11 +17,10 @@ steps:
     script: |
       pip install httpie
       pip install veracode-api-signing
-  displayName: 'Install Requerements'
+  displayName: 'Install Requirements'
 
 - task: PowerShell@2
   inputs:
-    filePath: 'DAST-Results.ps1'
+    filePath: 'DAST-Resultados.ps1'
     arguments: '$(veracodeAppName)'
-    showWarnings: true
   displayName: 'Resultados DAST'
