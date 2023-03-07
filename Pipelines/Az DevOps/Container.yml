@@ -1,0 +1,24 @@
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: VeracodeIaC
+
+steps:
+
+- script: |
+    curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+  displayName: 'Configuração inicial'
+
+- task: CmdLine@2
+  inputs:
+    script: './veracode scan --source google/cadvisor:latest --type image --format table'
+  displayName: 'Scan'
+
+- task: CmdLine@2
+  inputs:
+    script: './veracode sbom --source google/cadvisor:latest --type image --format table'
+  displayName: 'SBOM'
