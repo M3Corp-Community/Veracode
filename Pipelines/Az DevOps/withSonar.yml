@@ -1,0 +1,74 @@
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: Veracode
+
+stages:
+- stage: Sonar
+  displayName: SonarQube
+  dependsOn:
+  jobs:
+  - job: Check
+    steps:
+    - task: SonarQubePrepare@5
+      inputs:
+        SonarQube: '$(Sonar-Endpoint)'
+        scannerMode: 'CLI'
+        configMode: 'manual'
+        cliProjectKey: '$(Sonar-ProjectKey)'
+        cliSources: '.'
+      displayName: 'Prepare Analysis Configuration'
+    - task: Npm@1
+      inputs:
+        command: 'install'
+      displayName: 'NPM Install'
+    - script: |
+        FILTERED_PARAMS=$(echo $SONARQUBE_SCANNER_PARAMS | sed 's/"sonar.branch.name":"[^"]*"\,//g')
+        echo "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]$FILTERED_PARAMS"
+      displayName: Workaround sonar.branch.name
+    - task: SonarQubeAnalyze@5
+      displayName: 'Run Analysis'
+    - task: SonarQubePublish@5
+      inputs:
+        pollingTimeoutSec: '300'
+      displayName: 'Publish Gate'
+
+- stage: SAST
+  displayName: Veracode - SAST
+  dependsOn:
+  jobs:
+  - job: Check
+    steps:
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: '$(Agent.BuildDirectory)'
+        includeRootFolder: true
+        archiveType: 'zip'
+        archiveFile: '$(caminhoPacote)'
+        replaceExistingArchive: true
+      displayName: 'Criando pacote para analise'
+    - script: |
+        curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+      displayName: 'Download Pipeline Scanner'
+    - task: ExtractFiles@1
+      inputs:
+        archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+        destinationFolder: '$(Build.ArtifactStagingDirectory)'
+        cleanDestinationFolder: false
+      displayName: 'Extraindo ferramenta'
+    - script: |
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(APIID) -vkey $(APIKEY) --file '$(caminhoPacote)' --issue_details true 
+      displayName: 'Veracode PipelineScan'
+
+- stage: SCA
+  displayName: Veracode - SCA
+  dependsOn:
+  jobs:
+  - job: Check
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: |
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+      displayName: 'SCA - Agent Based'
