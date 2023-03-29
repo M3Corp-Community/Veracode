@@ -1,0 +1,26 @@
+# Java, .NET, Python, and Ruby libraries
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: Veracode
+
+stages:
+- stage: SCA
+  displayName: SCA
+  dependsOn:
+  jobs:
+  - job: AgentBased
+    steps: 
+    - task: CmdLine@2
+      inputs:
+        script: |
+          export SRCCLR_SCM_NAME=$(veracodeAppProfile)
+          export SRCCLR_SCM_TYPE="GITHUB"
+          export SRCCLR_SCM_TOKEN="$(tokenGitHub)"
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+      displayName: 'Veracode SCA'
+      continueOnError: true
