@@ -1,6 +1,6 @@
 # SCA
 iex ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1')) # Faz o download do script
-srcclr scan # Executa o scan
+srcclr scan --update-advisor --allow-dirty # Executa o scan
 
 
 # Pipeline Scan
