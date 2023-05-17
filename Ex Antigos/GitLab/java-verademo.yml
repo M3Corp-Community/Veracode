@@ -1,0 +1,82 @@
+stages:
+    - build
+    - sca_security_scanning
+    - pipeline_scan
+    - sandbox_scan
+    - static_scan
+
+build:
+    image: maven:3.8.1-jdk-11
+    stage: build
+    only:
+        - branches
+        - tags
+        - merge_requests
+    script:
+        - mvn package
+    after_script:
+        - ls -l ./target
+    artifacts:
+        paths:
+            - /builds/lucas.ferreira/Verademo_Java/target/verademo.war
+
+
+sca_security_scanning:
+    image: maven:3.8.1-jdk-11
+    stage: sca_security_scanning
+    script:
+         - curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan --update-advisor || true
+    allow_failure:
+            true
+
+pipeline_scan:
+  image: veracode/pipeline-scan:latest
+  stage: pipeline_scan
+  script:
+    - >
+    - java -jar /opt/veracode/pipeline-scan.jar 
+        -vid "${VERACODE_ID}" 
+        -vkey "${VERACODE_KEY}"
+        --file target/verademo.war
+        --issue_details true
+        || true
+  dependencies:
+      - build
+
+sandbox_scan:
+    image: veracode/api-wrapper-java
+    stage: sandbox_scan
+    script:
+        - >
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname Java-VeraDemo
+          -createprofile false
+          -vid "${VERACODE_ID}"
+          -vkey "${VERACODE_KEY}"
+          -sandboxname $CI_COMMIT_REF_NAME 
+          -createsandbox false
+          -sandboxname SANDBOX_1
+          -filepath target/verademo.war
+          -version "commit $CI_COMMIT_SHORT_SHA pipeline $CI_PIPELINE_ID job $CI_JOB_ID"
+    dependencies:
+        - build
+
+static_scan:
+    image: veracode/api-wrapper-java
+    stage: static_scan
+    script:
+        - >
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan
+          -vid "${VERACODE_ID}"
+          -vkey "${VERACODE_KEY}"
+          -appname Java-VeraDemo
+          -createprofile false
+          -autoscan true
+          -criticality VeryHigh
+          -filepath target/verademo.war
+          -version "job ${CI_JOB_ID} in pipeline ${CI_PIPELINE_ID}"
+    dependencies:
+        - build
+

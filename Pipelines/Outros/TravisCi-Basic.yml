@@ -1,0 +1,17 @@
+language: java
+
+env:
+  - DATE = `date + "%Y-%m-%d-%H%M"`
+
+jobs:
+  inclue:
+    - stage: "Build Java app with Maven"
+      name: "build"
+      script: mvn clean package
+
+    - stage: "Veracode Upload And Scan"
+      name: "Veracode Upload And Scan"
+      before_script:
+        - curl -L -o VeracodeJavaAPI.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/20.12.7.3/vosp-api-wrappers-java-20.12.7.3.jar
+      script:
+        - java -jar VeracodeJavaAPI.jar -vid $VeracodeID -vkey $VeracodeKey -action uploadandscan -appname "TravisCi-VeraDemo" -createprofile true -filepath target/verademo.war -version "$TRAVIS_JOB_ID - $TRAVIS_JOB_NUMBER $DATE" -scantimeout 60
