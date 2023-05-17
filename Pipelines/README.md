@@ -26,7 +26,7 @@ Expert -> Projetos utilizando o paralelismo para otimizar o processo</br>
 ## SandBox
 Para os casos onde tem dentro de um mesmo projeto uma versão de código que quer analisar mas não é a considerada "produção"</br>
 Podemos utilizar o recurso de SandBox no U&S/Wrapper, onde realizamos uma analise com as mesmas capacidades, mas armazenando o resulto em uma caixa isolada</br>
-Dentro de cada ferramenta teremos ao menos um exemplo de como implementar, mas lembre-se de que pode alterar os exemplos mais complexos adicionando os parâmetros necessários</br>
+Dentro de cada ferramenta teremos ao menos um exemplo de como implementar, mas lembre-se de que pode alterar os exemplos mais complexos adicionando os parâmetros necessários: SandBoxName e CreateSandBox</br>
 
 ## Dicas de otimização
 As ferramentas podem ser utilizadas em conjunto, buscando otimizar o processo</br>
