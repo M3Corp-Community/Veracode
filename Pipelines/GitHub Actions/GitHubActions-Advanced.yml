@@ -63,7 +63,7 @@ jobs:
           name: pacoteVeracode
       - name: Veracode Pipeline Scan
         env:
-          vid: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VKEY: ${{ secrets.VeracodeKey }}
           CaminhoArquivo: './veracode.zip'
         run: |
