@@ -16,7 +16,7 @@ phases:
       - curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
       - echo Veracode Pipeline Scan
       - curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
-      - unzip pipeline-scan-LATEST.zip
+      - unzip -o pipeline-scan-LATEST.zip
       - java -jar pipeline-scan.jar -vid $VeracodeID -vkey $VeracodeKey -f target/verademo.war --issue_details true 
 artifacts:
   files:
