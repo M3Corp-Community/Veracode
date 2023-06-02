@@ -1,0 +1,112 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- feature-123
+
+pool:
+  vmImage: ubuntu-latest
+ 
+variables:
+  veracodeAppProfile: $(APP_PROFILE)
+
+stages:
+- stage: Build
+  displayName: 'Build + [SCA & IaC] scans '
+  jobs:
+  - job: Build
+    steps: 
+    - task: Maven@4
+      inputs:
+        mavenPomFile: 'pom.xml'
+        options: 'clean'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        javaHomeOption: 'JDKVersion'
+        mavenVersionOption: 'Default'
+        mavenAuthenticateFeed: false
+        effectivePomSkip: false
+        sonarQubeRunAnalysis: false
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: 'target/verademo.war'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+
+  - job: VeracodeSCA
+    steps: 
+    - task: CmdLine@2
+      inputs:
+        script: |
+          export SRCCLR_API_TOKEN=$(SRCCLR_API_TOKEN)
+          export SRCCLR_SCM_URI=$(Build.Repository.Uri)
+          export SRCCLR_SCM_REF=$(Build.SourceBranchName)
+          export SRCCLR_SCM_REF_TYPE="branch"
+          export SRCCLR_SCM_REV=$(Build.SourceVersion)
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan  --allow-dirty --update-advisor --uri-as-name || true
+    displayName: 'Veracode SCA - Agent-Based Scan'  
+   
+  - job: VeracodeIaCScan
+    steps: 
+    - task: CmdLine@2
+      inputs:
+        script: |
+          export VERACODE_API_KEY_ID=$(VERACODE_API_ID)
+          export VERACODE_API_KEY_SECRET=$(VERACODE_API_KEY)
+      
+          echo [+] Configuring Veracode IaC Scan
+          curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+          ./veracode configure
+      
+          echo [+] Scanning directory
+          ./veracode scan --source . --type directory --format table
+    displayName: 'Veracode IaC Security'
+    
+- stage: ApplicationSecurityCheck 
+  displayName: Application Security Check 
+  dependsOn: Build
+  jobs:
+  - job: sastPolicyScan
+    displayName: 'Veracode SAST'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos' 
+    
+    - task: Veracode@3
+      inputs:
+        ConnectionDetailsSelection: 'Service Connection'
+        AnalysisService: 'veracode verademo java'
+        veracodeAppProfile: '$(APP_PROFILE)'
+        version: '$(build.buildNumber)'
+        filepath: '$(System.ArtifactsDirectory)/drop/verademo.war'
+        optargs: 'deleteincompletescan 1'
+        maximumWaitTime: '20'
+      displayName: 'Veracode SAST - Policy Scan'
+    
+  - job: VeracodePipelineScan
+    displayName: 'Veracode Pipeline Scan'
+    dependsOn: sastPolicyScan
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+
+    - task: VeracodePipelineScan@0
+      inputs:
+        VeracodeAPIID: '$(VERACODE_API_ID)'
+        VeracodeAPIsecret: '$(VERACODE_API_KEY)'
+        fileToScan: '$(System.ArtifactsDirectory)/drop/verademo.war'
+        breakPipeline: true
+        additionalFlags: '--issue_details true --project_name "Java-VeraDemo" --project_url "https://dev.azure.com/lucasferreira0413/verademo-java-web"'
+      displayName: 'Veracode Pipeline Scan'
