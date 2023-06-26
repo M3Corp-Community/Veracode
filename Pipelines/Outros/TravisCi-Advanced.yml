@@ -25,6 +25,6 @@ jobs:
     - stage: "Veracode Upload And Scan"
       name: "Veracode Upload And Scan"
       before_script:
-        - curl -L -o VeracodeJavaAPI.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/20.12.7.3/vosp-api-wrappers-java-20.12.7.3.jar
+        - curl -L -o VeracodeJavaAPI.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
       script:
         - java -jar VeracodeJavaAPI.jar -vid $VeracodeID -vkey $VeracodeKey -action uploadandscan -appname "TravisCi-VeraDemo" -createprofile true -filepath target/verademo.war -version "$TRAVIS_JOB_ID - $TRAVIS_JOB_NUMBER $DATE"
