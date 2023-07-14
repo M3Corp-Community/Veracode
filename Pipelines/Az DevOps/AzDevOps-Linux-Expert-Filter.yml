@@ -1,0 +1,95 @@
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(System.ArtifactsDirectory)/drop/$(Build.BuildId).zip
+  caminhoZIP: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    steps: 
+    - task: CmdLine@2
+      inputs:
+        script: |
+          zip -r $(caminhoZIP) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico'
+      displayName: 'Criando ZIP'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(caminhoZIP)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+    
+- stage: SCA
+  displayName: SCA
+  dependsOn:
+  jobs:
+  - job: SCA
+    displayName: 'Veracode SCA'
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: |
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+      displayName: 'Resultados SCA'
+      continueOnError: true
+  
+- stage: SAST
+  displayName: U&S and Pipeline Scan
+  dependsOn: Build
+  jobs:
+  - job: PipelineScan
+    displayName: 'Veracode PipelineScan'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - script: |
+        curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+      displayName: 'Download Pipeline Scanner'
+    - task: ExtractFiles@1
+      inputs:
+        archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+        destinationFolder: '$(Build.ArtifactStagingDirectory)'
+        cleanDestinationFolder: false
+    - script: |
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) --file '$(caminhoPacote)' --issue_details true 
+      displayName: 'Veracode PipelineScan'
+      continueOnError: true
+      
+  - job: Wrapper
+    displayName: 'Veracode U&S'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - task: Veracode@3
+      inputs:
+        ConnectionDetailsSelection: 'Credentials'
+        apiId: '$(VeracodeID)'
+        apiKey: '$(VeracodeKey)'
+        veracodeAppProfile: '$(veracodeAppProfile)'
+        version: '$(build.buildNumber)'
+        filepath: '$(caminhoPacote)'
+        createSandBox: false
+        createProfile: true
+        failTheBuildIfVeracodeScanDidNotInitiate: false
+        scanStatusCheckInterval: '60'
+        importResults: false
+        failBuildOnPolicyFail: false
+      displayName: 'Veracode U&S'
