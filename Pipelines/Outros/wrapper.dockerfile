@@ -1,0 +1,2 @@
+FROM veracode/api-wrapper-java:latest 
+RUN  java -jar /opt/veracode/api-wrapper.jar -vid $veracodeID -vkey $veracodeAPIkey -action uploadandscan -appname "$appName" -createprofile true -filepath "$caminhoArquivo" -version $numeroVersao 
