@@ -1,0 +1,27 @@
+pipelines:
+  default:
+    - step:
+        name: Build Maven
+        image: maven:3.8.1-jdk-11
+        script:
+        - mvn package
+        artifacts:
+          - target/verademo.war
+        after-script:
+          - ls -l | grep verademo
+          - echo "(Build) done!"
+
+    - step:
+          name: Veracode U&S
+          image: veracode/api-wrapper-java
+          script:
+            - java -jar /opt/veracode/api-wrapper.jar
+              -action UploadAndScan
+              -appname BitBucket-$BITBUCKET_REPO_FULL_NAME
+              -createprofile true
+              -autoscan true
+              -criticality VeryHigh
+              -vid "${VeracodeID}"
+              -vkey "${VeracodeKey}"
+              -filepath target/verademo.war
+              -version "$BITBUCKET_BUILD_NUMBER"
