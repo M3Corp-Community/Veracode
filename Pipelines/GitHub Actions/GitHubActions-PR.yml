@@ -1,4 +1,4 @@
-name: Veracode_Expert
+name: Veracode_PR
 on:
   push
 
@@ -27,30 +27,6 @@ jobs:
           SRCCLR_API_TOKEN: ${{ secrets.SCA }} # Lembrar de criar as credenciais no Secrets
         run: |
           curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --pull-request --allow-dirty
-
-  Veracode_UploadAndScan:
-    runs-on: ubuntu-latest
-    needs: Package
-    steps:
-      - name: Download Artefato
-        uses: actions/download-artifact@v2
-        with:
-          name: pacoteVeracode
-      - name: UploadAndScan
-        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
-        env:
-          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
-          VeracodeKey: ${{ secrets.VeracodeKey }}
-          AppName: Github Actions - ${{ github.repository }}
-        with:
-          vid: '$VeracodeID'
-          vkey: '$VeracodeKey'
-          criticality: 'VeryHigh'
-          appname: '$AppName'
-          createsandbox: true
-          filepath: 'veracode.zip'
-          deleteIncompleteScan: false
-          version: ${{ github.run_id }}
 
   Veracode_PipelineScan:
     runs-on: ubuntu-latest

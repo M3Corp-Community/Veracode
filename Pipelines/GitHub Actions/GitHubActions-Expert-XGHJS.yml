@@ -1,4 +1,4 @@
-name: Veracode_Expert
+name: Veracode_Force
 on:
   push
 
@@ -41,15 +41,16 @@ jobs:
         env:
           VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VeracodeKey: ${{ secrets.VeracodeKey }}
-          AppName: Github Actions - ${{ github.repository }}
+          AppName: ${{ github.repository }}
         with:
           vid: '$VeracodeID'
           vkey: '$VeracodeKey'
           criticality: 'VeryHigh'
           appname: '$AppName'
-          createsandbox: true
           filepath: 'veracode.zip'
-          deleteIncompleteScan: false
+          deleteIncompleteScan: true
+          scanallnonfataltoplevelmodules: true
+          includenewmodules: true
           version: ${{ github.run_id }}
 
   Veracode_PipelineScan:

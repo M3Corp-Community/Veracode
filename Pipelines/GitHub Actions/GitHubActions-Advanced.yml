@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  Package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -32,13 +32,14 @@ jobs:
 
   Veracode_UploadAndScan:
     runs-on: ubuntu-latest
-    needs: build
+    needs: Package
     steps:
       - name: Download Artefato
         uses: actions/download-artifact@v2
         with:
           name: pacoteVeracode
-      - uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
         env:
           VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VeracodeKey: ${{ secrets.VeracodeKey }}
@@ -55,7 +56,7 @@ jobs:
 
   Veracode_PipelineScan:
     runs-on: ubuntu-latest
-    needs: build
+    needs: Package
     steps:
       - name: Download Artefato
         uses: actions/download-artifact@v2

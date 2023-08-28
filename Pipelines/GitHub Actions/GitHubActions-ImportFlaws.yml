@@ -61,6 +61,7 @@ jobs:
         with:
           name: pacoteVeracode
       - name: Veracode Pipeline Scan
+        continue-on-error: true
         env:
           VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VKEY: ${{ secrets.VeracodeKey }}
@@ -69,3 +70,14 @@ jobs:
           curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
           unzip pipeline-scan-LATEST.zip
           java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -f $CaminhoArquivo --issue_details true 
+      - name: Converte para o formato SARIF
+        id: convert
+        uses: Veracode/veracode-pipeline-scan-results-to-sarif@v1.0.5
+        with:
+          pipeline-results-json: results.json
+          output-results-sarif: veracode-results.sarif
+          finding-rule-level: "3:1:0"
+      - name: Publica os resultados
+        uses: github/codeql-action/upload-sarif@v2
+        with: # Path to SARIF file relative to the root of the repository
+          sarif_file: veracode-results.sarif

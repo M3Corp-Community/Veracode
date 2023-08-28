@@ -28,7 +28,8 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: pacoteVeracode
-      - uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
         env:
           VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VeracodeKey: ${{ secrets.VeracodeKey }}

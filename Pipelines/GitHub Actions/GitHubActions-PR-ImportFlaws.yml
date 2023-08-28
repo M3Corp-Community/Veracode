@@ -1,4 +1,4 @@
-name: Veracode_Expert
+name: Veracode_PR
 on:
   push
 
@@ -28,30 +28,6 @@ jobs:
         run: |
           curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --pull-request --allow-dirty
 
-  Veracode_UploadAndScan:
-    runs-on: ubuntu-latest
-    needs: Package
-    steps:
-      - name: Download Artefato
-        uses: actions/download-artifact@v2
-        with:
-          name: pacoteVeracode
-      - name: UploadAndScan
-        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
-        env:
-          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
-          VeracodeKey: ${{ secrets.VeracodeKey }}
-          AppName: Github Actions - ${{ github.repository }}
-        with:
-          vid: '$VeracodeID'
-          vkey: '$VeracodeKey'
-          criticality: 'VeryHigh'
-          appname: '$AppName'
-          createsandbox: true
-          filepath: 'veracode.zip'
-          deleteIncompleteScan: false
-          version: ${{ github.run_id }}
-
   Veracode_PipelineScan:
     runs-on: ubuntu-latest
     needs: Package
@@ -61,6 +37,7 @@ jobs:
         with:
           name: pacoteVeracode
       - name: Veracode Pipeline Scan
+        continue-on-error: true
         env:
           VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
           VKEY: ${{ secrets.VeracodeKey }}
@@ -69,3 +46,14 @@ jobs:
           curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
           unzip pipeline-scan-LATEST.zip
           java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -f $CaminhoArquivo --issue_details true 
+      - name: Converte para o formato SARIF
+        id: convert
+        uses: Veracode/veracode-pipeline-scan-results-to-sarif@v1.0.5
+        with:
+          pipeline-results-json: results.json
+          output-results-sarif: veracode-results.sarif
+          finding-rule-level: "3:1:0"
+      - name: Publica os resultados
+        uses: github/codeql-action/upload-sarif@v2
+        with: # Path to SARIF file relative to the root of the repository
+          sarif_file: veracode-results.sarif
