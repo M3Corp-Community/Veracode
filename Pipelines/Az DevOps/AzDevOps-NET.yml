@@ -1,0 +1,104 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(System.ArtifactsDirectory)/drop/$(Build.BuildId).zip
+  caminhoZIP: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    steps:
+    - task: VSBuild@1
+      displayName: 'Build solution **\*.sln'
+      inputs:
+        vsVersion: 16.0
+        msbuildArgs: '/p:OutputPath=$(build.artifactstagingdirectory)\bin /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem  /p:PrecompileBeforePublish=true /p:EnableUpdateable=false /p:DebugSymbols=true  /p:UseMerge=false /p:DeleteAppCodeCompiledFiles=True /p:DeleteExistingFiles=True  /p:WDPMergeOption=CreateSeparateAssembly /p:UseFixedNames=true'
+        msbuildArchitecture: x64
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: 'Compress-Archive -Path "$(build.artifactstagingdirectory)\bin\*.dll", "$(build.artifactstagingdirectory)\bin\*.pdb" -DestinationPath $(caminhoZIP)'
+      displayName: 'Cria o pacote'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(caminhoZIP)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+    
+- stage: SCA
+  displayName: SCA
+  dependsOn:
+  jobs:
+  - job: SCA
+    displayName: 'Veracode SCA'
+    steps:
+    - task: PowerShell@2
+      inputs:
+        targetType: 'inline'
+        script: |
+          iex ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1')) # Faz o download do script
+          srcclr scan --update-advisor --allow-dirty # Executa o scan
+      displayName: 'Resultados SCA'
+      continueOnError: true
+  
+- stage: SAST
+  displayName: U&S and Pipeline Scan
+  dependsOn: Build
+  jobs:
+  - job: PipelineScan
+    displayName: 'Veracode PipelineScan'
+    steps:
+    - checkout: none
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - script: |
+        curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+      displayName: 'Download Pipeline Scanner'
+    - task: ExtractFiles@1
+      inputs:
+        archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+        destinationFolder: '$(Build.ArtifactStagingDirectory)'
+        cleanDestinationFolder: false
+    - script: |
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) --file $(caminhoPacote) --issue_details true 
+      displayName: 'Veracode PipelineScan'
+      continueOnError: true
+      
+  - job: Wrapper
+    displayName: 'Veracode U&S'
+    steps:
+    - checkout: none
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - task: Veracode@3
+      inputs:
+        ConnectionDetailsSelection: 'Credentials'
+        apiId: '$(VeracodeID)'
+        apiKey: '$(VeracodeKey)'
+        veracodeAppProfile: '$(veracodeAppProfile)'
+        version: '$(build.buildNumber)'
+        filepath: '$(caminhoPacote)'
+        createSandBox: false
+        createProfile: true
+        failTheBuildIfVeracodeScanDidNotInitiate: false
+        scanStatusCheckInterval: '60'
+        importResults: false
+        failBuildOnPolicyFail: false
+      displayName: 'Veracode U&S'
