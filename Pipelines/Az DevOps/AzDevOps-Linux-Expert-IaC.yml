@@ -93,7 +93,7 @@ stages:
         destinationFolder: '$(Build.ArtifactStagingDirectory)'
         cleanDestinationFolder: false
     - script: |
-          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) --file '$(caminhoPacote)' --issue_details true 
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) --file '$(caminhoPacote)' --issue_details true 
       displayName: 'Veracode PipelineScan'
       continueOnError: true
       
@@ -110,8 +110,8 @@ stages:
     - task: Veracode@3
       inputs:
         ConnectionDetailsSelection: 'Credentials'
-        apiId: '$(VeracodeID)'
-        apiKey: '$(VeracodeKey)'
+        apiId: '$(VERACODE_API_KEY_ID)'
+        apiKey: '$(VERACODE_API_KEY_SECRET)'
         veracodeAppProfile: '$(veracodeAppProfile)'
         version: '$(build.buildNumber)'
         filepath: '$(caminhoPacote)'
