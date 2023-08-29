@@ -1,0 +1,124 @@
+# Para testar, recomendo a utilização do projeto NodeGoat
+# Disponivel em: https://github.com/IGDEXE/NodeGoat
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(System.ArtifactsDirectory)/drop/verademo.war
+
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    steps: 
+    - task: Maven@3
+      inputs:
+        mavenPomFile: 'pom.xml'
+        mavenOptions: '-Xmx3072m'
+        javaHomeOption: 'JDKVersion'
+        jdkVersionOption: '1.8'
+        jdkArchitectureOption: 'x64'
+        publishJUnitResults: true
+        testResultsFiles: '**/surefire-reports/TEST-*.xml'
+        goals: 'package'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: 'target/verademo.war'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+    
+- stage: SCA
+  displayName: SCA
+  dependsOn:
+  jobs:
+  - job: SCA
+    displayName: 'Veracode SCA'
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: |
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+      displayName: 'Resultados SCA'
+      continueOnError: true
+    
+- stage: IaC
+  displayName: IaC
+  dependsOn:
+  jobs:
+  - job: IaC
+    displayName: 'Veracode IaC'
+    steps:
+    - script: |
+        curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      displayName: 'Configuração inicial'
+
+    - task: CmdLine@2
+      inputs:
+        script: './veracode scan --type directory --source ./terraform/ --format table'
+      displayName: 'Scan'
+
+    - task: CmdLine@2
+      inputs:
+        script: './veracode sbom --type repo --source https://github.com/IGDEXE/Terragoat --format table'
+      displayName: 'SBOM - Repo'
+      continueOnError: true
+  
+- stage: SAST
+  displayName: U&S and Pipeline Scan
+  dependsOn: Build
+  jobs:
+  - job: PipelineScan
+    displayName: 'Veracode PipelineScan'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - script: |
+        curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+      displayName: 'Download Pipeline Scanner'
+    - task: ExtractFiles@1
+      inputs:
+        archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+        destinationFolder: '$(Build.ArtifactStagingDirectory)'
+        cleanDestinationFolder: false
+    - script: |
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) --file '$(caminhoPacote)' --issue_details true 
+      displayName: 'Veracode PipelineScan'
+      continueOnError: true
+      
+  - job: Wrapper
+    displayName: 'Veracode U&S'
+    steps:
+    - task: DownloadBuildArtifacts@1
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: 'drop'
+        downloadPath: '$(System.ArtifactsDirectory)'
+      displayName: 'Carregando arquivos'
+    - task: Veracode@3
+      inputs:
+        ConnectionDetailsSelection: 'Credentials'
+        apiId: '$(VeracodeID)'
+        apiKey: '$(VeracodeKey)'
+        veracodeAppProfile: '$(veracodeAppProfile)'
+        version: '$(build.buildNumber)'
+        filepath: '$(caminhoPacote)'
+        createSandBox: false
+        createProfile: true
+        failTheBuildIfVeracodeScanDidNotInitiate: false
+        scanStatusCheckInterval: '60'
+        importResults: false
+        failBuildOnPolicyFail: false
+      displayName: 'Veracode U&S'
