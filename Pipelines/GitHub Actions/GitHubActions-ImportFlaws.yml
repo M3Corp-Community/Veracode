@@ -26,7 +26,7 @@ jobs:
         env:
           SRCCLR_API_TOKEN: ${{ secrets.SCA }} # Lembrar de criar as credenciais no Secrets
         run: |
-          curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --pull-request --allow-dirty
+          curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --allow-dirty
 
   Veracode_UploadAndScan:
     runs-on: ubuntu-latest
