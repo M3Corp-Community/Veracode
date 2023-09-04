@@ -1,0 +1,73 @@
+name: Veracode
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+      - name: Build with Maven
+        run: mvn package
+      - name: Publicando Artefato
+        uses: actions/upload-artifact@v2
+        with:
+          name: pacoteVeracode
+          path: target/verademo.war
+  
+  Veracode_SCA:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Veracode SCA
+        env:
+          SRCCLR_API_TOKEN: ${{ secrets.SCA }} # Lembrar de criar as credenciais no Secrets
+        run: |
+          curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --allow-dirty
+
+  Veracode_SAST:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+        env:
+          VID: ${{ secrets.VID }} # Lembrar de criar as credenciais no Secrets
+          VKEY: ${{ secrets.VKEY }}
+          AppName: Github Actions - ${{ github.repository }}
+        with:
+          vid: '$VID'
+          vkey: '$VKEY'
+          criticality: 'VeryHigh'
+          appname: '$AppName'
+          createsandbox: true
+          filepath: 'verademo.war'
+          deleteIncompleteScan: false
+          version: ${{ github.run_id }}
+
+  Veracode_PipelineScan:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: Veracode Pipeline Scan
+        env:
+          VID: ${{ secrets.VID }} # Lembrar de criar as credenciais no Secrets
+          VKEY: ${{ secrets.VKEY }}
+          CaminhoArquivo: 'verademo.war'
+        run: |
+          curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip pipeline-scan-LATEST.zip
+          java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -f $CaminhoArquivo --issue_details true

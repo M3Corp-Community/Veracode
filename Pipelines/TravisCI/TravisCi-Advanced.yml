@@ -1,5 +1,4 @@
 language: java
-
 env:
   - DATE = `date + "%Y-%m-%d-%H%M"`
 
