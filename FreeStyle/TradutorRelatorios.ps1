@@ -1,7 +1,7 @@
 # Funciona copiando e colando o conteudo no terminal, mas não quando chamamos o script .ps1
 
 # Configuracoes
-$caminhoArquivoXML = ""
+$caminhoArquivoXML = "exemploRelatorio.xml"
 
 function Traduzir {
     param (
