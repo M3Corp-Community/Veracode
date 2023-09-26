@@ -1,28 +1,25 @@
 pipeline {
     agent any 
     environment {
-        caminhoPacote = 'target/verademo.war'
+        caminhoPacote = 'uploadToVeracode/nodegoat.tar.gz'
         wrapperVersion = '23.8.12.0'
     }
     stages {
-        stage('Checkout') { 
-            steps {
-                git 'https://github.com/lucasferreiram3/verademo-java-web.git'
-                sh 'ls -l'
-            }
-        }
         stage('Clean') { 
             steps {
                 sh 'rm -rf pipeline-scan-LATEST.zip pipeline-scan.jar'
                 sh 'rm -rf veracode-wrapper.jar'
+                sh 'rm -rf uploadToVeracode'
             }
         }
-        stage('Build') { 
+
+        stage('Archive') { 
             steps {
-                sh 'mvn clean package'
-                sh 'ls -l target/'
+                sh 'mkdir uploadToVeracode'
+                sh 'find . -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.css" -o -name "*.jsp" -o -name "*.vue" | tar --exclude=./uploadToVeracode --exclude=./.git --exclude=./.gihtub -cvzf uploadToVeracode/nodegoat.tar.gz .'
             }
         }
+
         stage('Veracode SCA - Agent Scan') { 
             steps {
                 withCredentials([string(credentialsId: 'SRCCLR_API_TOKEN', variable: 'SRCCLR_API_TOKEN')]) {
@@ -39,7 +36,7 @@ pipeline {
                     -vid "${VID}" \
                     -vkey "${VKEY}" \
                     -action uploadandscan \
-                    -appname "Java-VeraDemo" \
+                    -appname "NodeGoat-Demo" \
                     -createprofile false \
                     -filepath ${caminhoPacote} \
                     -createsandbox true \
@@ -59,7 +56,7 @@ pipeline {
                     -vid "${VID}" \
                     -vkey "${VKEY}" \
                     -action uploadandscan \
-                    -appname "Java-VeraDemo" \
+                    -appname "NodeGoat-Demo" \
                     -createprofile false \
                     -filepath ${caminhoPacote} \
                     -deleteincompletescan true \
@@ -77,8 +74,8 @@ pipeline {
                 sh (""" java -jar pipeline-scan.jar \
                     --veracode_api_id "${VID}" \
                     --veracode_api_key "${VKEY}" \
-                    --file target/verademo.war \
-                    --project_name "Java-VeraDemo" \
+                    --file ${caminhoPacote} \
+                    --project_name "NodeGoat-Demo" \
                     --policy_name "Veracode Recommended High"
                     """)
                 }

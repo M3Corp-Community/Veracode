@@ -1,0 +1,85 @@
+trigger:
+- dev
+
+pool:
+  vmImage: windows-latest
+
+steps:
+- task: NuGetCommand@2
+  inputs:
+    command: 'restore'
+    restoreSolution: '**/*.sln'
+    feedsToUse: 'select'
+  displayName: 'Nuget Restore'
+
+- task: VSBuild@1
+  inputs:
+    solution: '**\*.sln'
+    vsVersion: '16.0'
+    msbuildArgs: '/p:OutputPath=$(build.artifactstagingdirectory)\bin /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem  /p:PrecompileBeforePublish=true /p:EnableUpdateable=false /p:DebugSymbols=true  /p:UseMerge=false /p:DeleteAppCodeCompiledFiles=True /p:DeleteExistingFiles=True  /p:WDPMergeOption=CreateSeparateAssembly /p:UseFixedNames=true'
+    clean: true
+    msbuildArchitecture: 'x64'
+  displayName: 'Visual Studio Build'
+      
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(build.artifactstagingdirectory)\bin'
+    includeRootFolder: true
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    replaceExistingArchive: true
+    verbose: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $env:SRCCLR_API_TOKEN
+      $env:SRCCLR_API_TOKEN='$(SRCCLR_API_TOKEN)'
+      $env:SRCCLR_SCM_URI='$(Build.Repository.Uri)'
+      $env:SRCCLR_SCM_REF='$(Build.SourceBranchName)'
+      $env:SRCCLR_SCM_REF_TYPE='branch'
+      $env:SRCCLR_SCM_REV='$(Build.SourceVersion)'
+
+      Set-ExecutionPolicy AllSigned -Scope Process -Force
+      $ProgressPreference = "silentlyContinue"; iex ((New-Object System.Net.WebClient).DownloadString('https://download.sourceclear.com/ci.ps1'))
+      srcclr scan $(Build.SourcesDirectory)
+  displayName: 'Veracode SCA agent-based'  
+
+- task: Veracode@3
+  inputs:
+    ConnectionDetailsSelection: 'Service Connection'
+    AnalysisService: 'veracode'
+    veracodeAppProfile: 'WebGoat-dotNET'
+    version: '$(build.buildNumber)'
+    filepath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    sandboxName: 'SANDBOX_HML'
+    createSandBox: true
+    optargs: 'deleteincompletescan 2 include DotNetGoat*'
+    createProfile: true
+  displayName: 'Sandbox Scan'
+  
+- task: Veracode@3
+  inputs:
+    ConnectionDetailsSelection: 'Service Connection'
+    AnalysisService: 'veracode'
+    veracodeAppProfile: 'WebGoat-dotNET'
+    version: '$(build.buildNumber)'
+    filepath: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+    optargs: 'deleteincompletescan 2 include DotNetGoat*'
+  displayName: 'Policy Scan'
+
+- task: CmdLine@2
+  inputs:
+    script: |
+      ls -l $(Build.ArtifactStagingDirectory)
+      curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+      unzip -o pipeline-scan-LATEST.zip
+      
+      #DOWNLOAD DA POLÍTICA COMO ARQUIVO PARA SER USADA NO SCAN
+      java -jar pipeline-scan.jar -vid $(VERACODE_ID) -vkey $(VERACODE_KEY) -rp "Veracode Recommended POV"
+
+
+      #SCAN COM PIPELINE SCAN USANDO A POLíTICA CUSTOMIZADA
+      java -jar pipeline-scan.jar -vid $(VERACODE_ID) -vkey $(VERACODE_KEY) -f $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip --include DotNetGoat* --project_name WebGoat-dotNET -pf="Veracode_Recommended_POV.json"
+  displayName: 'Pipeline Scan'
