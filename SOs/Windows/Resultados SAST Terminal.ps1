@@ -9,7 +9,7 @@ $numeroVersao = Get-Date -Format hhmmssddMMyy
 
 
 # Recebe o App ID com base no nome da aplicacao dentro do Veracode
-[xml]$INFO = $(VeracodeAPI.exe -action GetAppList | Select-String -Pattern $veracodeAppName)
+[xml]$INFO = $(VeracodeAPI.exe -action GetAppList | Select-String -Pattern $veracodeAppName)[0]
 # Filtra o App ID
 $appID = $INFO.app.app_id
 
@@ -35,6 +35,7 @@ try {
         Write-Host "Nota: $notaLetra - Score: $notaScore - Resultado: $complicanceStatus"
         Write-Host "Lista dos problemas encontrados:"
         $levels = $securityINFO.summaryreport.severity.level
+        [array]::Reverse($levels)
         foreach ($level in $levels) {
             $securityINFO.summaryreport.severity[$level].category
         }
