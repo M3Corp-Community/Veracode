@@ -1,0 +1,204 @@
+name: Veracode_MultiSBs
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Empacotamento dos arquivos
+        uses: thedoctor0/zip-release@master
+        with:
+          filename: 'veracode.zip'
+          path: .
+      - name: Publicando Artefato
+        uses: actions/upload-artifact@v2
+        with:
+          name: pacoteVeracode
+          path: veracode.zip
+  
+  Veracode_US_SB1:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+        continue-on-error: true
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          AppName: Github Actions - ${{ github.repository }}
+        with:
+          vid: '$VeracodeID'
+          vkey: '$VeracodeKey'
+          criticality: 'VeryHigh'
+          appname: '$AppName'
+          createsandbox: true
+          sandboxname: 'SB1'
+          filepath: 'veracode.zip'
+          scantimeout: 60
+          scanpollinginterval: 30
+          toplevel: true
+          scanallnonfataltoplevelmodules: true
+          version: ${{ github.run_id }}
+
+  Veracode_Results_SB1:
+    runs-on: ubuntu-latest
+    needs: Veracode_US_SB1
+    steps:
+      - name: Download Wrapper
+        shell: pwsh
+        run: |
+          curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+      - name: Results
+        shell: pwsh
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          veracodeAppName: Github Actions - ${{ github.repository }}
+          SandBoxname: SB1
+        run: |
+          # Configuracoes
+          $numeroVersao = Get-Date -Format hhmmssddMMyy
+
+          # Recebe o App ID com base no nome da aplicacao dentro do Veracode
+          [xml]$INFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action GetAppList | Select-String -Pattern $Env:veracodeAppName)[0]
+          # Filtra o App ID
+          $appID = $INFO.app.app_id
+
+          try {
+              # Pega o ID da SandBox
+                  [xml]$SBINFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action getsandboxlist -appid $appID)
+                  $SandBoxID = ($SBINFO.sandboxlist.sandbox | Where-Object { $_.sandbox_name -eq "$Env:SandBoxname" }).sandbox_id
+                  [xml]$buildINFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action getbuildlist -appid $appID -sandboxid $SandBoxID)
+                  $buildIDList = $buildINFO.buildlist.build.build_id
+                  [array]::Reverse($buildIDList)
+                  $buildID = $buildIDList[0]
+                  # Gera o relatorio
+                  $out = java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action summaryreport -buildid "$buildID" -outputfilepath "$env:LOCALAPPDATA\$numeroVersao.xml"
+                  $securityINFO = [xml](Get-Content "$env:LOCALAPPDATA\$numeroVersao.xml")
+                  # Recebendo informacoes
+                  Clear-Host
+                  $notaLetra = $securityINFO.summaryreport.'static-analysis'.rating
+                  $notaScore = $securityINFO.summaryreport.'static-analysis'.score
+                  $quemEnviou = $securityINFO.summaryreport.submitter
+                  $politica = $securityINFO.summaryreport.policy_name
+                  $complicanceStatus = $securityINFO.summaryreport.policy_compliance_status
+                  # Exibe os resultados
+                  Write-Host "Resultado do Scan: $numeroVersao"
+                  Write-Host "Nome App: $Env:veracodeAppName - App ID: $appID"
+                  Write-Host "Enviado por: $quemEnviou"
+                  Write-Host "Politica: $politica"
+                  Write-Host "SandBox: $Env:SandBoxname"
+                  Write-Host "Nota: $notaLetra - Score: $notaScore - Resultado: $complicanceStatus"
+                  Write-Host "Lista dos problemas encontrados:"
+                  $levels = $securityINFO.summaryreport.severity.level
+                  [array]::Reverse($levels)
+                  foreach ($level in $levels) {
+                      $securityINFO.summaryreport.severity[$level].category
+                  }
+          }
+          catch {
+              $ErrorMessage = $_.Exception.Message # Recebe o erro
+              Write-Host "Erro ao validar o Scan e pegar os dados"
+              Write-Host "$ErrorMessage"
+          }
+
+  Veracode_US_SB2:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+        continue-on-error: true
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          AppName: Github Actions - ${{ github.repository }}
+        with:
+          vid: '$VeracodeID'
+          vkey: '$VeracodeKey'
+          criticality: 'VeryHigh'
+          appname: '$AppName'
+          createsandbox: true
+          sandboxname: 'SB2'
+          filepath: 'veracode.zip'
+          scantimeout: 60
+          scanpollinginterval: 30
+          toplevel: true
+          scanallnonfataltoplevelmodules: true
+          version: ${{ github.run_id }}
+
+  Veracode_Results_SB2:
+    runs-on: ubuntu-latest
+    needs: Veracode_US_SB2
+    steps:
+      - name: Download Wrapper
+        shell: pwsh
+        run: |
+          curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+      - name: Results
+        shell: pwsh
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          veracodeAppName: Github Actions - ${{ github.repository }}
+          SandBoxname: SB2
+        run: |
+          # Configuracoes
+          $numeroVersao = Get-Date -Format hhmmssddMMyy
+
+          # Recebe o App ID com base no nome da aplicacao dentro do Veracode
+          [xml]$INFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action GetAppList | Select-String -Pattern $Env:veracodeAppName)[0]
+          # Filtra o App ID
+          $appID = $INFO.app.app_id
+
+          try {
+              # Pega o ID da SandBox
+                  [xml]$SBINFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action getsandboxlist -appid $appID)
+                  $SandBoxID = ($SBINFO.sandboxlist.sandbox | Where-Object { $_.sandbox_name -eq "$Env:SandBoxname" }).sandbox_id
+                  [xml]$buildINFO = $(java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action getbuildlist -appid $appID -sandboxid $SandBoxID)
+                  $buildIDList = $buildINFO.buildlist.build.build_id
+                  [array]::Reverse($buildIDList)
+                  $buildID = $buildIDList[0]
+                  # Gera o relatorio
+                  $out = java -jar veracode-wrapper.jar -vid $Env:VeracodeID -vkey $Env:VeracodeKey -action summaryreport -buildid "$buildID" -outputfilepath "$env:LOCALAPPDATA\$numeroVersao.xml"
+                  $securityINFO = [xml](Get-Content "$env:LOCALAPPDATA\$numeroVersao.xml")
+                  # Recebendo informacoes
+                  Clear-Host
+                  $notaLetra = $securityINFO.summaryreport.'static-analysis'.rating
+                  $notaScore = $securityINFO.summaryreport.'static-analysis'.score
+                  $quemEnviou = $securityINFO.summaryreport.submitter
+                  $politica = $securityINFO.summaryreport.policy_name
+                  $complicanceStatus = $securityINFO.summaryreport.policy_compliance_status
+                  # Exibe os resultados
+                  Write-Host "Resultado do Scan: $numeroVersao"
+                  Write-Host "Nome App: $Env:veracodeAppName - App ID: $appID"
+                  Write-Host "Enviado por: $quemEnviou"
+                  Write-Host "Politica: $politica"
+                  Write-Host "SandBox: $Env:SandBoxname"
+                  Write-Host "Nota: $notaLetra - Score: $notaScore - Resultado: $complicanceStatus"
+                  Write-Host "Lista dos problemas encontrados:"
+                  $levels = $securityINFO.summaryreport.severity.level
+                  [array]::Reverse($levels)
+                  foreach ($level in $levels) {
+                      $securityINFO.summaryreport.severity[$level].category
+                  }
+          }
+          catch {
+              $ErrorMessage = $_.Exception.Message # Recebe o erro
+              Write-Host "Erro ao validar o Scan e pegar os dados"
+              Write-Host "$ErrorMessage"
+          }
+
