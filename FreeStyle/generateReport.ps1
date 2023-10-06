@@ -44,12 +44,11 @@ function Get-VeracodeBuildID {
 function New-VeracodeSummaryReport {
     param (
         $veracodeAppProfile,
-        $veracodeAppProfileID,
+        $VeracodeBuildID,
         $reportFolder
     )
 
     try {
-        $VeracodeBuildID = Get-VeracodeBuildID $veracodeAppProfileID
         $reportName = "$veracodeAppProfile-Summary-$VeracodeBuildID.pdf"
         VeracodeAPI.exe -action summaryreport -buildid "$VeracodeBuildID" -format pdf -outputfilepath "$reportFolder\$reportName"
     }
@@ -62,12 +61,11 @@ function New-VeracodeSummaryReport {
 function New-VeracodeDetailedReport {
     param (
         $veracodeAppProfile,
-        $veracodeAppProfileID,
+        $VeracodeBuildID,
         $reportFolder
     )
 
     try {
-        $VeracodeBuildID = Get-VeracodeBuildID $veracodeAppProfileID
         $reportName = "$veracodeAppProfile-Detailed-$VeracodeBuildID.pdf"
         VeracodeAPI.exe -action detailedreport -buildid "$VeracodeBuildID" -format pdf -outputfilepath "$reportFolder\$reportName"
     }
@@ -82,9 +80,12 @@ $reportFolder = "$env:LOCALAPPDATA"
 $veracodeAllAppProfiles = Get-VeracodeAllAppProfiles
 foreach ($veracodeAppProfile in $veracodeAllAppProfiles) {
     try {
+        Write-Host "App Profile: $veracodeAppProfile"
         $veracodeAppProfileID = Get-VeracodeAppProfileID "$veracodeAppProfile"
-        New-VeracodeSummaryReport $veracodeAppProfile $veracodeAppProfileID $reportFolder
-        New-VeracodeDetailedReport $veracodeAppProfile $veracodeAppProfileID $reportFolder
+        $VeracodeBuildID = Get-VeracodeBuildID $veracodeAppProfileID
+        # Policy Scan Reports
+        New-VeracodeSummaryReport $veracodeAppProfile $VeracodeBuildID $reportFolder
+        New-VeracodeDetailedReport $veracodeAppProfile $VeracodeBuildID $reportFolder
     }
     catch {
         $ErrorMessage = $_.Exception.Message
