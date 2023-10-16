@@ -6,7 +6,7 @@ stages:
     - veracode_sast_pipeline_scan
 
 variables:
-    Caminho_Arquivo: "/builds/lucas.ferreira4/WebGoat-Net/WebGoat/bin/"
+    Caminho_dlls: "/builds/lucas.ferreira4/WebGoat-Net/WebGoat/bin/"
 
 build:
     image: mono:latest
@@ -22,14 +22,14 @@ build:
         - ls -l /builds/lucas.ferreira4/WebGoat-Net/WebGoat/bin
     artifacts:
         paths:
-            - $Caminho_Arquivo
+            - $Caminho_dlls
 
 veracode_sca:
     image: maven:3.8.1-jdk-11
     stage: veracode_sca
     script:
          - export EXTRA_ARGS='--update-advisor uri-as-name'
-         - curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan || true
+         - curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan $EXTRA_ARGS || true
     dependencies:
       - build
 
@@ -37,6 +37,7 @@ veracode_sast_sandbox_scan:
     image: veracode/api-wrapper-java
     stage: veracode_sast_sandbox_scan
     script:
+        - zip -r uploadToVeracode.zip $Caminho_dlls
         - >
         - java -jar /opt/veracode/api-wrapper.jar
           -action UploadAndScan 
@@ -46,7 +47,7 @@ veracode_sast_sandbox_scan:
           -vkey "${VKEY}"
           -sandboxname $CI_COMMIT_REF_NAME 
           -createsandbox true
-          -filepath $Caminho_Arquivo
+          -filepath uploadToVeracode.zip
           -version "job ${CI_JOB_ID}"
           -deleteincompletescan 2
     dependencies:
@@ -57,6 +58,7 @@ veracode_sast_policy_scan:
     image: veracode/api-wrapper-java
     stage: veracode_sast_policy_scan
     script:
+        - zip -r uploadToVeracode.zip $Caminho_dlls
         - >
         - java -jar /opt/veracode/api-wrapper.jar
           -action UploadAndScan
@@ -65,7 +67,7 @@ veracode_sast_policy_scan:
           -appname WebGoat-dotNET
           -createprofile false
           -autoscan true
-          -filepath $Caminho_Arquivo
+          -filepath uploadToVeracode.zip
           -version "job ${CI_JOB_ID}"
           -deleteincompletescan 2
     dependencies:
@@ -76,7 +78,7 @@ veracode_sast_pipeline_scan:
   image: veracode/pipeline-scan:latest
   stage: veracode_sast_pipeline_scan
   script:
-    - zip -r uploadToVeracode.zip $Caminho_Arquivo
+    - zip -r uploadToVeracode.zip $Caminho_dlls
     - >
     - java -jar /opt/veracode/pipeline-scan.jar --include DotNetGoat*
         -vid "${VID}" 
