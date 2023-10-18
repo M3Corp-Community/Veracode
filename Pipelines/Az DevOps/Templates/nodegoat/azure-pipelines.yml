@@ -1,0 +1,35 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- az-templates
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: $(APP_PROFILE)
+  
+stages:
+- stage: sast_pipeline_scan
+  displayName: 'Veracode SAST - Pipeline Scan'
+  jobs:
+  - job: sca_agent_scan
+    steps:
+      - template: templates/veracode-sca-agent-templates.yml
+
+  - job: sast_sandbox_scan
+    dependsOn: sca_agent_scan
+    steps:
+      - template: templates/veracode-sandbox-templates.yml
+
+  - job: sast_policy_scan
+    dependsOn: sast_sandbox_scan
+    steps:
+      - template: templates/veracode-policy-templates.yml
+
+  - job: sast_pipeline_scan
+    steps:
+    - template: templates/veracode-pipelinescan-templates.yml
