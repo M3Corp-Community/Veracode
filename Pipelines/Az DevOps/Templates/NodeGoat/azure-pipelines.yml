@@ -1,0 +1,19 @@
+trigger:
+- az-templates
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: $(APP_PROFILE)
+  
+stages:
+- stage: sast_pipeline_scan
+  displayName: 'Veracode SAST - Pipeline Scan'
+  jobs:
+  - job: sast_pipeline_scan
+    steps:
+    - template: templates/veracode-pipelinescan-templates.yml
+  - job: sast_sandbox_scan
+    steps:
+      - template: templates/veracode-sandbox-templates.yml
