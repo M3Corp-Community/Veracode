@@ -1,0 +1,7 @@
+steps:
+  - script: | 
+      sudo apt install zip unzip -y
+      zip -v -r upload.zip $(System.DefaultWorkingDirectory) -x "*node_modules" "*.git" -i "*.js"  "*.html"  "*.htm"  "*.ts"  "*.tsx"  "*.json"  "*.css"  "*.jsp"  "*.vue"
+      curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/$(wrapperVersion)/vosp-api-wrappers-java-$(wrapperVersion).jar
+      java -jar veracode-wrapper.jar -vid $(VERACODE_API_ID) -vkey $(VERACODE_API_KEY) -action uploadandscan -appname $(APP_PROFILE) -createprofile false -filepath $(System.DefaultWorkingDirectory)/upload.zip -deleteincompletescan true -version $(build.buildNumber)
+      rm -rf upload.zip

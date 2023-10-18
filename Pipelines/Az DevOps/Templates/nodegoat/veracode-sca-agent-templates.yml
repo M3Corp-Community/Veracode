@@ -1,0 +1,8 @@
+steps:
+  - script: | 
+      export SRCCLR_API_TOKEN=$(SRCCLR_API_TOKEN)
+      export SRCCLR_SCM_URI=$(Build.Repository.Uri)
+      export SRCCLR_SCM_REF=$(Build.SourceBranchName)
+      export SRCCLR_SCM_REF_TYPE="branch"
+      export SRCCLR_SCM_REV=$(Build.SourceVersion)
+      curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --uri-as-name || true
