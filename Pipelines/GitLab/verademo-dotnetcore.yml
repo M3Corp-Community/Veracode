@@ -1,0 +1,43 @@
+stages:
+    - build
+    - static-scan
+    - sca-scan
+    - container-scan
+
+build_app:
+    image: bitnami/dotnet-sdk:3.1
+    stage: build
+    script: 
+        - cd app
+        - dotnet publish -c Debug -p:UseAppHost=false
+        - tar -C bin/Debug/ -zcvf ../upload.tar.gz netcoreapp3.1/
+    artifacts:
+        paths:
+            - upload.tar.gz
+
+veracode_static_scan:
+    image: veracode/api-wrapper-java:latest
+    stage: static-scan
+    script:
+        # the scan WILL fail, so just fire and forget
+        - java -jar /opt/veracode/api-wrapper.jar -vid $VERACODE_API_KEY_ID -vkey $VERACODE_API_KEY_SECRET
+            -action UploadAndScan -appname "Verademo.NET" -createprofile false
+            -filepath upload.tar.gz -version "Commit ${CI_COMMIT_SHA:0:8} - Job $CI_JOB_ID"
+    allow_failure: true
+
+# the above steps are the bare minimum.
+# below are some additional steps that are commonplace
+
+veracode_sca_scan:
+    image: bitnami/dotnet-sdk:3.1
+    stage: sca-scan
+    script:
+        - curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan app
+                    
+veracode_container_scan:
+    image: bitnami/dotnet-sdk:3.1
+    stage: container-scan
+    script:
+        - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+        - ./veracode scan --type directory --source . --format table
+                    
