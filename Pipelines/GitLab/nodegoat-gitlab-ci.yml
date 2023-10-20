@@ -3,6 +3,7 @@ stages:
     - veracode_sca
     - veracode_iac_scan
     - veracode_sast_sandbox_scan
+    - veracode_sast_policy_scan
     - veracode_sast_pipeline_scan
     
 build:
@@ -66,7 +67,7 @@ veracode_sast_sandbox_scan:
 
 veracode_sast_policy_scan:
     image: veracode/api-wrapper-java
-    stage: veracode_sast_sandbox_scan
+    stage: veracode_sast_policy_scan
     script:
         - zip -r uploadToVeracode.zip . -x "*node_modules" "*.git" -i "*.js"  "*.html"  "*.htm"  "*.ts"  "*.tsx"  "*.json"  "*.css"  "*.jsp"  "*.vue"
         - >
