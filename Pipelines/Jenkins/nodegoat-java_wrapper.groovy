@@ -16,7 +16,7 @@ pipeline {
         stage('Archive') { 
             steps {
                 sh 'mkdir uploadToVeracode'
-                sh 'find . -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.css" -o -name "*.jsp" -o -name "*.vue" | tar --exclude=./uploadToVeracode --exclude=./.git --exclude=./.gihtub -cvzf uploadToVeracode/nodegoat.tar.gz .'
+                sh 'find . -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.css" -o -name "*.jsp" -o -name "*.vue" | tar --exclude=./uploadToVeracode --exclude=./.git --exclude=./.github -cvzf uploadToVeracode/nodegoat.tar.gz .'
             }
         }
 
