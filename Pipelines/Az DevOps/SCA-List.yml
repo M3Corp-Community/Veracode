@@ -1,0 +1,29 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  SRCCLR_API_TOKEN: $(SCAToken)
+  listURLsPath: URL-List.txt
+
+steps:
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      # Download SCA
+      Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1'))
+
+      $listURLs = Get-Content -Path "$(listURLsPath)"
+      foreach ($URL in $listURLs) {
+          try {
+              srcclr scan --url $URL
+          }
+          catch {
+              $ErrorMessage = $_.Exception.Message
+              Write-Host "$ErrorMessage"
+          }
+      }
+  displayName: 'Veracode SCA'
