@@ -10,6 +10,7 @@ pool:
 variables:
   veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
   caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+  nomeAmbiente: "HML"
 
 steps:
 - task: CmdLine@2
