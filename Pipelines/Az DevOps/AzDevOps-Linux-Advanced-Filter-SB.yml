@@ -1,0 +1,48 @@
+# Para testar, recomendo a utilização do projeto NodeGoat
+# Disponivel em: https://github.com/IGDEXE/NodeGoat
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+steps:
+- task: CmdLine@2
+  inputs:
+    script: |
+      zip -r $(caminhoZIP) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico'
+  displayName: 'Criando pacote para analise'
+  
+
+- task: CmdLine@2
+  inputs:
+    script: |
+      export SRCCLR_SCM_NAME=$(veracodeAppProfile)
+      curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+  displayName: 'Veracode SCA'
+  continueOnError: true
+  
+- script: |
+    curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+  displayName: 'Download Veracode Wrapper'
+- script: |
+    java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action uploadandscan -appname $(veracodeAppProfile) -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -scanallnonfataltoplevelmodules true -createsandbox true -sandboxname "$(nomeAmbiente)"
+  displayName: 'Veracode U&S'
+
+- script: |
+    curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+  displayName: 'Download Pipeline Scanner'
+- task: ExtractFiles@1
+  inputs:
+    archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+    destinationFolder: '$(Build.ArtifactStagingDirectory)'
+    cleanDestinationFolder: false
+- script: |
+      java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) --file '$(caminhoPacote)' --issue_details true 
+  displayName: 'Veracode PipelineScan'
+  continueOnError: true
