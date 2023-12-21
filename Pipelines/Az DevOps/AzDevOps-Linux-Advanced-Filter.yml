@@ -15,7 +15,7 @@ steps:
 - task: CmdLine@2
   inputs:
     script: |
-      zip -r $(caminhoZIP) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico'
+      zip -r $(caminhoPacote) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico'
   displayName: 'Criando pacote para analise'
   
 
