@@ -1,0 +1,36 @@
+# Definicao dos stages
+stages:
+    - Artifact
+    - SAST
+
+variables:
+    APP_Profile: "GitLab.${CI_PROJECT_NAME}"
+    Caminho_Arquivo: "target/verademo.war"
+
+# Cria o ZIP com os arquivos conforme a documentacao da Veracode
+packaging:
+    image: maven:3.3.9-jdk-8
+    stage: Artifact
+    script:
+        - mvn package
+    artifacts:
+        paths:
+            - $Caminho_Arquivo
+
+# Utiliza o SCA para fazer a analise de componentes de terceiros
+sca:
+        image: openjdk:8
+        stage: Artifact
+        when: always
+        script:
+            - curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor
+
+# Inicia a analise SAST/SCA por meio do Wrapper
+Veracode_UploadAndScan:
+    image: openjdk:8
+    stage: SAST
+    script:
+        - chmod +x wrapperCurl.sh
+        - ./wrapperCurl.sh "${VeracodeID}" "${VeracodeKey}" "$APP_Profile" "$Caminho_Arquivo"
+    dependencies:
+        - packaging
