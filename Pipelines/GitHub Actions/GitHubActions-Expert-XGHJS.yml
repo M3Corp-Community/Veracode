@@ -1,4 +1,4 @@
-name: Veracode_Force
+name: Veracode_XGH
 on:
   push
 
