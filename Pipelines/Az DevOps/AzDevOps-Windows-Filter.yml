@@ -1,0 +1,67 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+steps:
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $sourcePath = Get-Location
+      $destinationPath = "$(caminhoPacote)"
+
+      # Filtrar os arquivos com as extensões desejadas
+      $filesToInclude = Get-ChildItem -Path $sourcePath -Include *.dll, *.pdb -File -Recurse
+
+      # Criar o arquivo zip com os arquivos filtrados
+      Compress-Archive -Path $filesToInclude.FullName -DestinationPath $destinationPath
+  displayName: 'Criando pacote para analise'
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+  displayName: 'Download Veracode Wrapper'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action uploadandscan -appname $(veracodeAppProfile) -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote)
+  displayName: 'Veracode U&S'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      iex ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1')) # Faz o download do script
+      srcclr scan --update-advisor --allow-dirty # Executa o scan
+  displayName: 'Veracode SCA'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $urlDownload = "https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip"
+      $caminhoDownload = "VeracodePipeline.zip" # Define um caminho para o arquivo de download
+      Invoke-WebRequest -Uri "$urlDownload" -OutFile "$caminhoDownload" # Faz o download
+      Expand-Archive -Path "$caminhoDownload" -DestinationPath "$(Build.ArtifactStagingDirectory)" # Descompacta o ZIP para uma pasta
+  displayName: 'Configuracao Pipeline Scan'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: 'java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -f $(caminhoPacote) --issue_details true'
+  displayName: 'Veracode PipelineScan'
+  continueOnError: true
