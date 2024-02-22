@@ -1,0 +1,99 @@
+name: Veracode_Policy
+on:
+  workflow_dispatch:
+
+jobs:
+  Package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Empacotamento dos arquivos
+        uses: thedoctor0/zip-release@master
+        with:
+          filename: 'veracode.zip'
+          path: .
+      - name: Publicando Artefato
+        uses: actions/upload-artifact@v2
+        with:
+          name: pacoteVeracode
+          path: veracode.zip
+  
+  Veracode_SCA:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Veracode SCA
+        env:
+          SRCCLR_API_TOKEN: ${{ secrets.SCA }} # Lembrar de criar as credenciais no Secrets
+        run: |
+          curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s – scan --update-advisor --allow-dirty
+
+  Veracode_UploadAndScan:
+    runs-on: ubuntu-latest
+    needs: Package
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          AppName: Github Actions - ${{ github.repository }}
+        with:
+          vid: '$VeracodeID'
+          vkey: '$VeracodeKey'
+          criticality: 'VeryHigh'
+          appname: '$AppName'
+          createsandbox: true
+          filepath: 'veracode.zip'
+          version: ${{ github.run_id }}
+
+  Veracode_PipelineScan:
+    runs-on: ubuntu-latest
+    needs: Package
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: Veracode Pipeline Scan
+        env:
+          VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VKEY: ${{ secrets.VeracodeKey }}
+          CaminhoArquivo: './veracode.zip'
+        run: |
+          curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip pipeline-scan-LATEST.zip
+          java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -f $CaminhoArquivo --issue_details true
+
+  Veracode_PipelineScan_Policy:
+    runs-on: ubuntu-latest
+    needs: Package
+    steps:
+      - name: Download Artefato
+        uses: actions/download-artifact@v2
+        with:
+          name: pacoteVeracode
+      - name: Download Pipeline Scan
+        run: |
+          curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip pipeline-scan-LATEST.zip
+      - name: Download Policy
+        env:
+          VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VKEY: ${{ secrets.VeracodeKey }}
+          VeracodePolicyName: ${{ secrets.VeracodePolicyName }}
+        run: |
+          java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -rp="$VeracodePolicyName"
+      - name: Veracode Pipeline Scan
+        env:
+          VID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VKEY: ${{ secrets.VeracodeKey }}
+          CaminhoArquivo: './veracode.zip'
+          VeracodePolicyName: ${{ secrets.VeracodePolicyName }}
+        run: |
+          veracodePolicyFile=$(echo "$VeracodePolicyName" | sed 's/ /_/g')
+          java -jar pipeline-scan.jar -vid $VID -vkey $VKEY -f $CaminhoArquivo --issue_details true -pf $veracodePolicyFile.json
