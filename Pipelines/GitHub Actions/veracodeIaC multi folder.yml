@@ -1,0 +1,26 @@
+name: Veracode_IaC
+on:
+    workflow_dispatch:
+
+jobs:
+  Veracode_IaC:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download IaC Tool
+        run: |
+            curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      - name: Veracode IaC
+        shell: pwsh
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
+          VERACODE_API_KEY_SECRET: ${{ secrets.VeracodeKey }}
+        run: |
+            $subfolder = Get-ChildItem -Path ./scenarios -Directory
+            foreach ($subpasta in $subfolder) {
+                $folderFullName = $subpasta.FullName
+                $folderName = $subpasta.Name
+                Write-Host "Work in scenario: $folderName ---------------------------------------------------------------------"
+                ./veracode scan --type directory --source $folderFullName --format table
+                Write-Host "...."
+            }
