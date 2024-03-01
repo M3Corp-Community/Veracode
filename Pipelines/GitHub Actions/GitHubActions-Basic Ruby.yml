@@ -1,0 +1,41 @@
+name: Veracode_Ruby
+on:
+  workflow_dispatch:
+
+jobs:
+  Veracode:
+    runs-on: ubuntu-latest
+    container:
+      image: ruby:2.6.5
+      options: --user root
+    steps:
+      - uses: actions/checkout@v2
+      - name: Package the application for Veracode Static Analysis
+        run: |
+          gem install bundler -v '1.17.3'
+          gem install veracode
+          bundle install
+          bundle exec veracode prepare
+      
+      - name: Find ZIP file
+        run: |
+            zip_file=$(find . -type f -name "*veracode*.zip" | head -n 1)
+            echo "ZIP file found at: $zip_file"
+            echo "##[set-output name=zip_path;]$zip_file"
+        id: find_zip
+      
+      - name: UploadAndScan
+        uses: veracode/veracode-uploadandscan-action@master
+        env:
+          VeracodeID: ${{ secrets.VeracodeID }}
+          VeracodeKey: ${{ secrets.VeracodeKey }}
+          AppName: ${{ github.repository }}
+        with:
+          vid: '$VeracodeID'
+          vkey: '$VeracodeKey'
+          criticality: 'VeryHigh'
+          appname: '$AppName'
+          createsandbox: true
+          filepath: ${{ steps.find_zip.outputs.zip_path }}
+          deleteIncompleteScan: false
+          version: ${{ github.run_id }}

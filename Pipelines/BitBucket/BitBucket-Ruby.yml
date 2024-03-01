@@ -1,0 +1,37 @@
+#  Template Ruby build
+
+#  This template allows you to validate your Ruby code.
+#  The workflow allows running tests and code linting on the default branch.
+
+image: ruby:2.6.5
+
+pipelines:
+  default:
+  - step:
+      name: 'Veracode Software Composition Analysis'
+      size: 2x
+      script:
+        - curl -sSL https://download.sourceclear.com/ci.sh | sh -s scan --update-advisor --skip-vms
+  - step:
+      name: Veracode SAST Packaging & SAST upload
+      image: ruby:2.6.5
+      script:
+        - gem install bundler -v '1.17.3'
+        - gem install veracode
+        - bundle install
+        - bundle exec veracode prepare
+  - step:
+      name: Veracode_Static_Analysis
+      image: veracode/api-wrapper-java:latest
+      script:
+        - zip_file=$(find . -type f -name "*veracode*.zip" | head -n 1)
+        - echo ${zip_file}
+        - java -jar /opt/veracode/api-wrapper.jar
+            -vid ${VERACODE_API_ID}
+            -vkey ${VERACODE_API_KEY}
+            -action UploadAndScan
+            -createprofile true
+            -appname railgoat
+            -version $BITBUCKET_BUILD_NUMBER
+            -filepath ${zip_file}
+
