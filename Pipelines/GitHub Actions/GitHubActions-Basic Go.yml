@@ -6,26 +6,24 @@ jobs:
   Veracode:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: 1.22
+          go-version-file: go.mod
+
+      - name: Create Vendor Folder
+        run: go mod vendor
+
       - name: Build
-        run: go build
-      - name: Package the application for Veracode Static Analysis
-        run: |
-          export GOPATH=`go env GOPATH` &&
-          export PATH="$GOPATH/bin:$PATH" &&
-          go install github.com/relaxnow/vcgopkg@latest
-          vcgopkg
-          ls
-      - name: Find ZIP file
-        run: |
-            zip_file=$(find . -type f -name "*.zip" | head -n 1)
-            echo "ZIP file found at: $zip_file"
-            echo "##[set-output name=zip_path;]$zip_file"
-        id: find_zip
+        run: go build -v ./...
+
+      - name: Empacotamento dos arquivos
+        uses: thedoctor0/zip-release@master
+        with:
+          filename: 'veracode.zip'
+          path: .
       - name: UploadAndScan
         uses: veracode/veracode-uploadandscan-action@master
         env:
@@ -38,6 +36,6 @@ jobs:
           criticality: 'VeryHigh'
           appname: '$AppName'
           createsandbox: true
-          filepath: ${{ steps.find_zip.outputs.zip_path }}
+          filepath: veracode.zip
           deleteIncompleteScan: false
           version: ${{ github.run_id }}
