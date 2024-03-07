@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+    
+    environment {
+        VeracodeProfile = 'Jenkins.Java'
+        CaminhoPacote = 'uploadToVeracode/${VeracodeProfile}.tar.gz'
+    }
+// Start Step - Veracode Scan
+        stage('Archive') { 
+            steps {
+                sh 'mkdir -p uploadToVeracode'
+                sh 'find . -name "*.js" -o -name "*.html" -o -name "*.htm" -o -name "*.ts" -o -name "*.tsx" -o -name "*.json" -o -name "*.css" -o -name "*.jsp" -o -name "*.vue" | tar --exclude=./uploadToVeracode --exclude=./.git --exclude=./.github -cvzf ${CaminhoPacote} .'
+            }
+        }
+        stage('Veracode Upload And Scan') {
+            steps {
+                script {
+                    sh 'curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/21.2.7.4/vosp-api-wrappers-java-21.2.7.4.jar'
+                    
+                    if (env.BRANCH_NAME == 'master') {
+                        withCredentials([usernamePassword(credentialsId: 'VeracodeID', passwordVariable: 'VeracodeKey', usernameVariable: 'VeracodeID')]) {
+                            sh 'java -jar veracode-wrapper.jar -vid ${VeracodeID} -vkey ${VeracodeKey} -action uploadandscan -appname ${VeracodeProfile} -createprofile false  -version $(date +%H%M%s%d%m%y) -filepath ${CaminhoPacote} -scantimeout 60 -scanpollinginterval 30 -scanallnonfataltoplevelmodules true'
+                        }
+                    } else {
+                        withCredentials([usernamePassword(credentialsId: 'VeracodeID', passwordVariable: 'VeracodeKey', usernameVariable: 'VeracodeID')]) {
+                            sh 'java -jar veracode-wrapper.jar -vid ${VeracodeID} -vkey ${VeracodeKey} -action uploadandscan -appname ${VeracodeProfile} -createprofile false  -version $(date +%H%M%s%d%m%y) -filepath ${CaminhoPacote} -scantimeout 60 -scanpollinginterval 30 -scanallnonfataltoplevelmodules true -createsandbox true -sandboxname ${env.BRANCH_NAME}'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Clean') { 
+            steps {
+                sh 'rm -rf veracode-wrapper.jar'
+                sh 'rm -rf uploadToVeracode'
+            }
+        }
+        // End Step - Veracode Scan
+}
