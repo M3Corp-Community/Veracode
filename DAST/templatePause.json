@@ -1,0 +1,30 @@
+{
+    "name": "Name-of-Your-Dynamic-Analysis",
+    "scans": [
+      {
+        "scan_config_request": {
+          "target_url": {
+            "url": "http://www.example.com",
+            "http_and_https": true
+          }
+        }
+      }
+    ],
+  "visibility": {
+     "setup_type": "SEC_LEADS_ONLY",
+     "team_identifiers": []
+  },
+        "schedule": {
+            "now": true,
+            "duration": {
+            "length": 2,
+            "unit": "DAY"
+            },
+            "scan_blackout_schedule": {
+            "blackout_type": "THESE_HOURS",
+            "blackout_start_time": "11:00",
+            "blackout_end_time": "23:00",
+            "blackout_days": null
+            }
+        }
+}

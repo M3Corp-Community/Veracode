@@ -37,7 +37,8 @@ jobs:
           vkey: '$VeracodeKey'
           criticality: 'VeryHigh'
           appname: '$AppName'
-          createsandbox: true
           filepath: ${{ steps.find_zip.outputs.zip_path }}
-          deleteIncompleteScan: false
+          scantimeout: 60
+          scanpollinginterval: 30
+          toplevel: true
           version: ${{ github.run_id }}

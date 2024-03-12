@@ -1,0 +1,43 @@
+{
+    "name": "Name-of-Your-Dynamic-Analysis",
+    "scans": [
+      {
+        "scan_config_request": {
+          "target_url": {
+            "url": "http://www.example.com",
+            "http_and_https": true
+          },
+          "auth_configuration": {
+            "authentications": {
+              "HEADER": {
+                "authtype": "HEADER",
+                "headers": [
+                  {
+                    "key": "{header_name}",
+                    "value": "{your_custom_header}"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    ],
+  "visibility": {
+     "setup_type": "SEC_LEADS_ONLY",
+     "team_identifiers": []
+  },
+        "schedule": {
+            "start_date": "2019-09-27T16:49:00-04:00",
+            "duration": {
+            "length": 1,
+            "unit": "DAY"
+            },
+            "scan_blackout_schedule": {
+            "blackout_type": "THESE_HOURS",
+            "blackout_start_time": "21:00",
+            "blackout_end_time": "23:00",
+            "blackout_days": null
+            }
+        }
+}
