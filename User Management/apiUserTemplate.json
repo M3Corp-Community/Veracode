@@ -1,0 +1,24 @@
+{
+    "user_name":"username",
+    "first_name":"first",
+    "last_name":"last",
+    "email_address":"teste@mail.com",
+    "ip_restricted":false,
+    "active":true,
+    "roles":[
+       {
+          "role_name":"noteamrestrictionapi"
+       },
+       {
+          "role_name":"apisubmitanyscan"
+       },
+       {
+          "role_name":"resultsapi"
+       }
+    ],
+    "permissions":[
+       {
+          "permission_name":"apiUser"
+       }
+    ]
+ }
