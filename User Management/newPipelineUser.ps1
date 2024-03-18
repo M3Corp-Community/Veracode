@@ -66,6 +66,11 @@ function Get-VeracodePipelineUser {
 
     if ($validatedUser) {
         $veracodeSecrets = Get-AzKeyVaultSecret -VaultName $userName
+    } else {
+        $userID = New-VeracodeApiUser $userName
+        $veracodeCredentials = New-VeracodeApiUserCredentials $userID
+        # Save the credentials in Vault
+        $VeracodeID, $VeracodeKey, $expirationDate = $veracodeCredentials.Split(';')
     }
-    
+    # Save in Az DevOps the values
 }
