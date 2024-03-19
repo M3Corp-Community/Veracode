@@ -60,6 +60,6 @@ function New-VeracodePipelineUser {
 
 # Faz a criação conforme os times da lista
 foreach ($team in $teamList) {
-    $team = $team -replace '[^\w\-]', '-'
+    $team = $team -replace '[^\p{L}\p{N}\-]', '-'
     New-VeracodePipelineUser $team
 }
