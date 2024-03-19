@@ -13,13 +13,10 @@ variables:
   veracodeTeams: "DEMOs"
 
 steps:
-- task: ArchiveFiles@2
+- task: CmdLine@2
   inputs:
-    rootFolderOrFile: '$(Agent.BuildDirectory)'
-    includeRootFolder: true
-    archiveType: 'zip'
-    archiveFile: '$(caminhoPacote)'
-    replaceExistingArchive: true
+    script: |
+      zip -r $(caminhoPacote) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico' '.git/*'
   displayName: 'Criando pacote para analise'
 
 - script: |
