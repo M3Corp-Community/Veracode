@@ -40,13 +40,23 @@ steps:
 
       # Se houver arquivos DLL e PDB correspondentes, criar o arquivo zip
       if ($filesToInclude.Count -gt 0) {
-          Write-Host "$filesToInclude"
-          Compress-Archive -Path $filesToInclude -DestinationPath "$destinationPath"
-          Write-Host "Arquivo zip criado com sucesso em: $destinationPath"
+        foreach ($file in $filesToInclude) {
+            Write-Host "$file"
+            Compress-Archive -Path $file -Update -DestinationPath "$destinationPath"
+            Write-Host "Arquivo zip criado com sucesso em: $destinationPath"
+        }
       } else {
           Write-Host "Nenhum par de arquivos DLL e PDB correspondente encontrado."
       }
   displayName: 'Criando pacote para analise'
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+  displayName: 'Download Veracode Wrapper'
+  continueOnError: true
 
 - task: PowerShell@2
   inputs:
