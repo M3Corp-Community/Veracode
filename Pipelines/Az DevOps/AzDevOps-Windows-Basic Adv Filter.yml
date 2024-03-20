@@ -1,0 +1,57 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+steps:
+- task: VSBuild@1
+  displayName: 'Build solution **\*.sln'
+  inputs:
+    vsVersion: 16.0
+    msbuildArgs: '/p:OutputPath=$(build.artifactstagingdirectory)\bin /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem  /p:PrecompileBeforePublish=true /p:EnableUpdateable=false /p:DebugSymbols=true  /p:UseMerge=false /p:DeleteAppCodeCompiledFiles=True /p:DeleteExistingFiles=True  /p:WDPMergeOption=CreateSeparateAssembly /p:UseFixedNames=true'
+    msbuildArchitecture: x64
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $sourcePath = Get-Location
+      $destinationPath = "$(caminhoPacote)"
+
+      # Filtrar os arquivos DLL
+      $dllFiles = Get-ChildItem -Path $sourcePath -Filter *.dll -File -Recurse
+
+      # Inicialize um array para armazenar os arquivos DLL e PDB correspondentes
+      $filesToInclude = @()
+
+      # Para cada arquivo DLL encontrado, verifique se há um arquivo PDB correspondente
+      foreach ($dllFile in $dllFiles) {
+          $pdbFile = Get-ChildItem -Path $sourcePath -Filter "$($dllFile.BaseName).pdb" -File -Recurse
+          if ($pdbFile) {
+              $filesToInclude += $dllFile.FullName
+              $filesToInclude += $pdbFile.FullName
+          }
+      }
+
+      # Se houver arquivos DLL e PDB correspondentes, criar o arquivo zip
+      if ($filesToInclude.Count -gt 0) {
+          Write-Host "$filesToInclude"
+          Compress-Archive -Path $filesToInclude -DestinationPath "$destinationPath"
+          Write-Host "Arquivo zip criado com sucesso em: $destinationPath"
+      } else {
+          Write-Host "Nenhum par de arquivos DLL e PDB correspondente encontrado."
+      }
+  displayName: 'Criando pacote para analise'
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action uploadandscan -appname $(veracodeAppProfile) -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote)
+  displayName: 'Veracode U&S'
+  continueOnError: true
