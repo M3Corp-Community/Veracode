@@ -12,7 +12,7 @@ function New-VeracodeApiUser {
     $newUser = $infoUser | ConvertTo-Json -depth 100
     $apiReturn = $newUser | http --auth-type=veracode_hmac POST "https://api.veracode.com/api/authn/v2/users"
     $apiReturn = $apiReturn | ConvertFrom-Json
-    $userID = $apiReturn.user_id 
+    $userID = $apiReturn.user_id
     return $userID
 }
 

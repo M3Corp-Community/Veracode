@@ -1,0 +1,47 @@
+trigger:
+- master
+
+stages:
+- stage: Linux
+  displayName: Linux
+  jobs:
+  - job: Build
+    pool:
+        vmImage: 'ubuntu-latest'
+    steps: 
+    - powershell: |
+        curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+        $json = ./veracode scan --type directory --source ./terraform/ | ConvertFrom-Json
+        $policy = $json.'policy-passed'
+        if ($policy -eq $false) {
+            $problemsList = $json.'policy-results'.failures.msg
+            foreach ($problem in $problemsList) {
+                Write-Host "$problem"
+            }
+            Write-Error "Policy dont Pass"
+        } else {
+            Write-Host "Policy Pass"
+        }
+      displayName: 'Veracode IaC'
+      continueOnError: true
+      env: 
+        VERACODE_API_KEY_ID: $(VeracodeID)
+        VERACODE_API_KEY_SECRET: $(VeracodeKey)
+
+- stage: Windows
+  displayName: Windows
+  jobs:
+  - job: Build
+    pool:
+        vmImage: 'windows-latest'
+    steps: 
+    - powershell: |
+        Set-ExecutionPolicy AllSigned -Scope Process -Force
+        $ProgressPreference = "silentlyContinue"; iex ((New-Object System.Net.WebClient).DownloadString('https://tools.veracode.com/veracode-cli/install.ps1'))
+        veracode sbom --source ./terraform/ --type directory --format table
+        veracode scan --source ./terraform/ --type directory --format table
+      displayName: 'Veracode IaC'
+      continueOnError: true
+      env: 
+        VERACODE_API_KEY_ID: $(VeracodeID)
+        VERACODE_API_KEY_SECRET: $(VeracodeKey)

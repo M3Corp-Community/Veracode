@@ -1,0 +1,39 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+steps:
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Agent.BuildDirectory)'
+    includeRootFolder: true
+    archiveType: 'zip'
+    archiveFile: '$(caminhoPacote)'
+    replaceExistingArchive: true
+  displayName: 'Criando pacote para analise'
+
+- powershell: |
+    Set-ExecutionPolicy AllSigned -Scope Process -Force
+    $ProgressPreference = "silentlyContinue"; iex ((New-Object System.Net.WebClient).DownloadString('https://tools.veracode.com/veracode-cli/install.ps1'))
+    veracode static scan $(caminhoPacote)
+  displayName: 'Veracode PipelineScan'
+  continueOnError: true
+  env: 
+    VERACODE_API_KEY_ID: $(VeracodeID)
+    VERACODE_API_KEY_SECRET: $(VeracodeKey)
+
+- powershell: |
+    Set-ExecutionPolicy AllSigned -Scope Process -Force
+    $ProgressPreference = "silentlyContinue"; iex ((New-Object System.Net.WebClient).DownloadString('https://tools.veracode.com/veracode-cli/install.ps1'))
+    veracode scan --source ./Config --type directory
+  displayName: 'Veracode IaC'
+  continueOnError: true
+  env: 
+    VERACODE_API_KEY_ID: $(VeracodeID)
+    VERACODE_API_KEY_SECRET: $(VeracodeKey)
