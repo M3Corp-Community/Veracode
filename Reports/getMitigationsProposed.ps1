@@ -2,7 +2,6 @@ function Get-VeracodeAllFlaws {
     $jsonData = @{
         "report_type"= "findings"
         "last_updated_start_date" = "2024-01-01 00:10:10"
-        "mitigation_status" = "Mitigation Proposed"
     }
     $json = $jsonData | ConvertTo-Json
     $apiReturn = $json | http --auth-type=veracode_hmac POST "https://api.veracode.com/appsec/v1/analytics/report"

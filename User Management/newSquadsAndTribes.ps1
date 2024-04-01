@@ -64,6 +64,14 @@ function Get-VeracodeSquads {
     return $teamList
 }
 
+function Get-VeracodeSquadsList {
+    $infoTeam = http --auth-type=veracode_hmac GET "https://api.veracode.com/api/authn/v2/teams?all_for_org=true&size=10000" | ConvertFrom-Json
+    $teamList = $infoTeam._embedded.teams
+    $teamList = $teamList | Where-Object { $_.team_name -like '*dtl_*' }
+    $teamList = $teamList.team_name
+    return $teamList
+}
+
 function Get-VeracodeTribes {
     $infoTeam = http --auth-type=veracode_hmac GET "https://api.veracode.com/api/authn/v2/business_units?all_for_org=true&size=10000" | ConvertFrom-Json
     $teamList = $infoTeam._embedded.business_units
