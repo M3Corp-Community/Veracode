@@ -1,0 +1,78 @@
+trigger:
+- master
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  veracodeAppProfile: AzDevOps.$(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+steps:
+- task: VSBuild@1
+  displayName: 'Build solution **\*.sln'
+  inputs:
+    vsVersion: 16.0
+    msbuildArgs: '/p:OutputPath=$(build.artifactstagingdirectory)\bin /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem  /p:PrecompileBeforePublish=true /p:EnableUpdateable=false /p:DebugSymbols=true  /p:UseMerge=false /p:DeleteAppCodeCompiledFiles=True /p:DeleteExistingFiles=True  /p:WDPMergeOption=CreateSeparateAssembly /p:UseFixedNames=true'
+    msbuildArchitecture: x64
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $sourcePath = Get-Location
+      $destinationPath = "$(caminhoPacote)"
+      New-Item -Path ".\UploadVeracode" -ItemType Directory
+
+      # Filtrar os arquivos DLL
+      $dllFiles = Get-ChildItem -Path $sourcePath -Include *.dll -File -Recurse | Where-Object { $_.FullName -notmatch 'Microsoft|UnitTest|Xunit|Test' }
+
+      # Para cada arquivo DLL encontrado, verifique se há um arquivo PDB correspondente
+      foreach ($dllFile in $dllFiles) {
+      $pdbFile = Get-ChildItem -Path $sourcePath -Filter "$($dllFile.BaseName).pdb" -File -Recurse | Where-Object { $_.FullName -notmatch 'Microsoft|UnitTest|Xunit|Test|\\obj\\|ref|refint' }
+      if ($pdbFile) {
+          Move-Item -Path $dllFile.FullName -Destination ".\UploadVeracode" -Verbose
+          Move-Item -Path $pdbFile.FullName -Destination ".\UploadVeracode" -Verbose
+          }
+      }
+      # Obtém todos os arquivos JSON no diretório de origem
+      $arquivosConfig = Get-ChildItem -Path $sourcePath -Include *.json, *.yml, *.xml
+      # Move cada arquivo JSON para o diretório de destino
+      foreach ($arquivo in $arquivosConfig) {
+          Move-Item -Path $arquivo.FullName -Destination ".\UploadVeracode" -Verbose -Force
+      }
+
+      Compress-Archive -Path ".\UploadVeracode" -DestinationPath "$destinationPath"
+      Write-Host "Arquivo zip criado com sucesso em: $destinationPath"
+  displayName: 'Criando pacote para analise'
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+  displayName: 'Download Veracode Wrapper'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action uploadandscan -appname $(veracodeAppProfile) -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote)
+  displayName: 'Veracode U&S'
+  continueOnError: true
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      $businessUnit = "Teste BU"
+      # Recebe o App ID com base no nome da aplicacao dentro do Veracode
+      [xml]$INFO = $(java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action GetAppList | Select-String -Pattern $(veracodeAppProfile))[0]
+      # Filtra o App ID
+      $appID = $INFO.app.app_id
+      # Faz a modificação de BU
+      Write-Host "Add $(veracodeAppProfile) (ID: $appID) in $businessUnit"
+      java -jar veracode-wrapper.jar -vid $(VeracodeID) -vkey $(VeracodeKey) -action updateapp -appid $appID -businessunit "$businessUnit"
+  displayName: 'Veracode BU Config'
+  continueOnError: true
