@@ -35,7 +35,7 @@ $appID = $appInfo._embedded.applications.guid
 
 if ($appID) {
     # Faz o loop de validacao
-    while ($scanStatus -ne "PUBLISHEDk") {
+    while ($scanStatus -ne "PUBLISHED") {
         $appInfo = Get-VeracodeAppDetails $veracodeAppName
         $scanStatus = $appInfo._embedded.applications.scans.status
         Write-Host "Status atual do scan: $scanStatus"
