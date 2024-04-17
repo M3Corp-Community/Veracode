@@ -1,19 +1,28 @@
 #!/bin/bash
-sourcePath=$(pwd)
-destinationPath="$caminhoPacote"
-mkdir -p ./UploadVeracode
+# Diretório atual
+diretorio_atual=$(pwd)
 
-# Filtrar os arquivos DLL
-dllFiles=$(find "$sourcePath" -type f -name "*.dll" | grep -Ev 'Microsoft|UnitTest|Xunit|Test|/obj/|ref|refint')
+# Criar uma pasta temporária
+pasta_temporaria=$(mktemp -d)
 
-# Para cada arquivo DLL encontrado, verifique se há um arquivo PDB correspondente
-for dllFile in $dllFiles; do
-    pdbFile=$(find "$sourcePath" -type f -name "$(basename "$dllFile" .dll).pdb" | grep -Ev 'Microsoft|UnitTest|Xunit|Test|/obj/|ref|refint')
-    if [ -n "$pdbFile" ]; then
-        mv "$dllFile" "./UploadVeracode"
-        mv "$pdbFile" "./UploadVeracode"
+# Encontra todas as DLLs no diretório atual e subdiretórios
+dlls=$(find "$diretorio_atual" -type f -name '*.dll')
+
+# Para cada DLL encontrada, verifica se existe um PDB correspondente
+for dll in $dlls; do
+    pdb="${dll%.*}.pdb"
+    if [ -f "$pdb" ]; then
+        # Move DLL e PDB correspondente para a pasta temporária, forçando a substituição
+        mv -f "$dll" "$pdb" "$pasta_temporaria"
     fi
 done
 
-zip -r "$destinationPath" "./UploadVeracode"
-echo "Arquivo zip criado com sucesso em: $destinationPath"
+# Cria um arquivo ZIP contendo a pasta temporária
+if [ -n "$(ls -A "$pasta_temporaria")" ]; then
+    zip -jr dlls_com_pdb.zip "$pasta_temporaria"
+else
+    echo "Nenhuma DLL com PDB correspondente encontrada."
+fi
+
+# Limpa a pasta temporária
+rm -r "$pasta_temporaria"

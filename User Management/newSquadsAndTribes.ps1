@@ -8,12 +8,12 @@ function New-VeracodeTribe {
     }
     $tribeID = ($tribeList | Where-Object { $_.bu_name -eq "$tribeName" }).bu_id
     if (-not $tribeID) {
+        Write-Host "Criando tribo: $tribeName"
         $jsonTribe = $jsonData | ConvertTo-Json
         $apiReturn = $jsonTribe | http --auth-type=veracode_hmac POST "https://api.veracode.com/api/authn/v2/business_units"
         $apiReturn = $apiReturn | ConvertFrom-Json
         $tribeID = $apiReturn.bu_id
     }
-    
     return $tribeID
 }
 
