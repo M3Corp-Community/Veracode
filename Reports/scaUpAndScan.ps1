@@ -15,15 +15,8 @@ function Get-VeracodeSCAResults {
     param (
         $veracodeGuid
     )
-    $apiReturn = http --auth-type=veracode_hmac GET "https://api.veracode.com/appsec/v2/applications/$veracodeGuid/findings?scan_type=SCA&page=$pageNumber&size=500" | ConvertFrom-Json
-    $pages = $apireturn.page.total_pages
-    $pageNumber = 0
-    while ($pageNumber -ne $pages) {
-        $apiReturn = http --auth-type=veracode_hmac GET "https://api.veracode.com/appsec/v2/applications/$veracodeGuid/findings?scan_type=SCA&page=$pageNumber&size=500" | ConvertFrom-Json
-        $reportSCA += $apiReturn._embedded.findings
-        # Incrementar o contador
-        $pageNumber++
-    }
+    $apiReturn = http --auth-type=veracode_hmac GET "https://api.veracode.com/appsec/v2/applications/$veracodeGuid/summary_report" | ConvertFrom-Json
+    $reportSCA = $apiReturn.software_composition_analysis.vulnerable_components.component_dto
     return $reportSCA
 }
 
@@ -33,26 +26,18 @@ function Show-VeracodeScaResults {
     )
 
     foreach ($scaResult in $scaResults) {
-        $violates_policy = $scaResult.violates_policy
-        $description = $scaResult.description
-        $component_filename = $scaResult.finding_details.component_filename
-        $version = $scaResult.finding_details.version
-        $licenses = $scaResult.finding_details.licenses
-        $component_path = $scaResult.finding_details.component_path.path
+        # General Info
+        $violates_policy = $scaResult.component_affects_policy_compliance
+        $component_filename = $scaResult.library
+        $version = $scaResult.version
+        # License info
+        $licenses = $scaResult.licenses.license_dto
+        $licenseName = $licenses.name
+        $licenseRisk = $licenses.risk_rating
+        # Show info
         Write-Host "$component_filename - $version"
         Write-Host "Fora de compliance? $violates_policy"
-        Write-Host "$description"
-        Write-Host "Licenciamento:"
-        foreach ($license in $licenses) {
-            $licenseID = $license.license_id
-            $licenseRisk = $license.risk_rating
-            Write-Host "$licenseID - $licenseRisk"
-        }
-        Write-Host "$licenses"
-        Write-Host "Component Path:"
-        foreach ($component in $component_path) {
-            Write-Host "$component"
-        }
+        Write-Host "Licenciamento: $licenseName - Risco: $licenseRisk"
         Write-Host "---"
     }
 }
