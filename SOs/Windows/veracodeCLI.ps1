@@ -27,6 +27,11 @@ veracode configure
 veracode scan --source alpine:latest --type image --format table
 veracode scan --source ./IaC --type directory --format table
 
+# Faz o SCA
+$Env:SRCCLR_API_TOKEN = ""
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1'))
+srcclr scan .
+
 # Faz o empacotamento para analise
 $caminhoPacote = (Get-Item $PWD).Name + ".zip"
 veracode package -s .
