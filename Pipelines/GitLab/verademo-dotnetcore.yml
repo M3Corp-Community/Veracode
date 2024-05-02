@@ -1,8 +1,10 @@
 stages:
     - build
-    - static-scan
-    - sca-scan
-    - container-scan
+    - veracode-static-pipeline-scan
+    - veracode_sca
+    - veracode_iac_scan
+    - veracode_sast_sandbox_scan
+    - veracode_sast_policy_scan
 
 build_app:
     image: bitnami/dotnet-sdk:3.1
@@ -10,34 +12,88 @@ build_app:
     script: 
         - cd app
         - dotnet publish -c Debug -p:UseAppHost=false
-        - tar -C bin/Debug/ -zcvf ../upload.tar.gz netcoreapp3.1/
+        #- tar -C bin/Debug/ -zcvf ../upload.tar.gz netcoreapp3.1/
+    after_script:
+        - ls -l app/bin/Debug/netcoreapp3.1/
     artifacts:
         paths:
-            - upload.tar.gz
+            - app/bin/Debug/
 
-veracode_static_scan:
-    image: veracode/api-wrapper-java:latest
-    stage: static-scan
-    script:
-        # the scan WILL fail, so just fire and forget
-        - java -jar /opt/veracode/api-wrapper.jar -vid $VERACODE_API_KEY_ID -vkey $VERACODE_API_KEY_SECRET
-            -action UploadAndScan -appname "Verademo.NET" -createprofile false
-            -filepath upload.tar.gz -version "Commit ${CI_COMMIT_SHA:0:8} - Job $CI_JOB_ID"
-    allow_failure: true
+veracode-static-pipeline-scan:
+  image: veracode/pipeline-scan:latest
+  stage: veracode-static-pipeline-scan
+  script:
+    - >
+    - zip -r upload.zip app/bin/Debug/netcoreapp3.1/
+    - java -jar /opt/veracode/pipeline-scan.jar -vid "${VERACODE_API_ID}" -vkey "${VERACODE_API_KEY}" --file upload.zip || true
+  allow_failure: false
+  dependencies:
+    - build_app
 
-# the above steps are the bare minimum.
-# below are some additional steps that are commonplace
-
-veracode_sca_scan:
+veracode_sca:
     image: bitnami/dotnet-sdk:3.1
-    stage: sca-scan
+    stage: veracode_sca
     script:
-        - curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan app
-                    
-veracode_container_scan:
+         - export EXTRA_ARGS='--update-advisor uri-as-name'
+         - curl -sSL https://download.sourceclear.com/ci.sh | sh -s -- scan app || true
+    allow_failure: false
+    dependencies:
+      - build_app
+
+veracode_iac_scan:
     image: bitnami/dotnet-sdk:3.1
-    stage: container-scan
+    stage: veracode_iac_scan
     script:
-        - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
-        - ./veracode scan --type directory --source . --format table
-                    
+      -  export VERACODE_API_KEY_ID="${VERACODE_API_ID}" 
+      -  export VERACODE_API_KEY_SECRET="${VERACODE_API_KEY}"
+      
+      -  echo [+] Configuring Veracode IaC Scan
+      -  curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      
+      -  echo [+] Scanning directory
+      -  ./veracode scan --source . --type directory --format table
+    allow_failure: false
+    dependencies:
+      - build_app
+
+veracode_sast_sandbox_scan:
+    image: veracode/api-wrapper-java
+    stage: veracode_sast_sandbox_scan
+    script:
+        - >
+        - zip -r upload.zip app/bin/Debug/netcoreapp3.1/
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname verademo-dotnetcore
+          -createprofile false
+          -vid "${VERACODE_API_ID}"
+          -vkey "${VERACODE_API_KEY}"
+          -sandboxname $CI_COMMIT_REF_NAME 
+          -createsandbox true
+          -filepath upload.zip
+          -version "job ${CI_JOB_ID}"
+          -deleteincompletescan 2
+    allow_failure: false
+    dependencies:
+      - build_app
+      - veracode-static-pipeline-scan
+
+veracode_sast_policy_scan:
+    image: veracode/api-wrapper-java
+    stage: veracode_sast_policy_scan
+    script:
+        - >
+        - zip -r upload.zip app/bin/Debug/netcoreapp3.1/
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname verademo-dotnetcore
+          -createprofile false
+          -vid "${VERACODE_API_ID}"
+          -vkey "${VERACODE_API_KEY}"
+          -filepath upload.zip
+          -version "job ${CI_JOB_ID}"
+          -deleteincompletescan 2
+    allow_failure: false
+    dependencies:
+      - build_app
+      - veracode_sast_sandbox_scan
