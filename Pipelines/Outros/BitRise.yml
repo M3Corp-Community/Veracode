@@ -1,0 +1,38 @@
+---
+format_version: '11'
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: other
+trigger_map:
+- push_branch: "*"
+  workflow: primary
+- pull_request_source_branch: "*"
+  workflow: primary
+workflows:
+  primary:
+    steps:
+    - activate-ssh-key@4:
+        run_if: '{{getenv "SSH_RSA_PRIVATE_KEY" | ne ""}}'
+    - git-clone@6: {}
+    - create-zip@0:
+        inputs:
+        - source_path: "."
+        - destination: application
+    - script@1:
+        title: SAST
+        inputs:
+        - content: |-
+            wget https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/20.8.7.1/vosp-api-wrappers-java-20.8.7.1.jar -O veracodeJavaAPI.jar
+            java -jar veracodeJavaAPI.jar -vid $VERACODE_API_ID -vkey $VERACODE_API_KEY -action UploadAndScan -appname "BitRise.$BITRISE_APP_TITLE" -createprofile true -autoscan true -filepath application.zip -version $BITRISE_BUILD_NUMBER
+    - script@1:
+        title: SCA
+        inputs:
+        - content: curl -sSL https://download.sourceclear.com/ci.sh | sh
+    - script@1:
+        title: Pipeline Scan
+        inputs:
+        - content: |-
+            curl -O https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+            unzip pipeline-scan-LATEST.zip pipeline-scan.jar
+            java -jar pipeline-scan.jar --veracode_api_id "$VERACODE_API_ID" --veracode_api_key "$VERACODE_API_KEY" --file "application.zip"
+        is_always_run: true
+    - deploy-to-bitrise-io@1: {}
