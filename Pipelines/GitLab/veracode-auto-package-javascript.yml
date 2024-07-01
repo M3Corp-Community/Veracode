@@ -1,0 +1,97 @@
+stages:
+    - build
+    - veracode_sca
+    - veracode_iac_scan
+    - veracode_sast_sandbox_scan
+    - veracode_sast_policy_scan
+    - veracode_sast_pipeline_scan
+    
+build:
+    image: node:latest
+    stage: build
+    only:
+        - branches
+        - tags
+        - merge_requests
+    script:
+        - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+        - ./veracode package --source . --output verascan --trust 
+    after_script:
+        - ls -l verascan
+    artifacts:
+        paths:
+            - /builds/lucas.ferreira4/verademo-javascript-api/verascan/veracode-auto-pack-verademo-javascript-api-js.zip
+
+veracode_sca:
+    image: node:latest
+    stage: veracode_sca
+    script:
+         - export EXTRA_ARGS='--update-advisor uri-as-name'
+         - curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan || true
+    dependencies:
+      - build
+
+veracode_iac_scan:
+    image: node:latest
+    stage: veracode_iac_scan
+    script:
+      -  curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      -  ./veracode scan --source . --type directory --format table
+    dependencies:
+      - build
+
+veracode_sast_sandbox_scan:
+    image: veracode/api-wrapper-java
+    stage: veracode_sast_sandbox_scan
+    script:
+        - >
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname $CI_PROJECT_NAME
+          -createprofile true
+          -vid "${VERACODE_API_KEY_ID}"
+          -vkey "${VERACODE_API_KEY_SECRET}"
+          -sandboxname $CI_COMMIT_REF_NAME 
+          -createsandbox true
+          -filepath verascan/veracode-auto-pack-verademo-javascript-api-js.zip
+          -version "job ${CI_JOB_ID}"
+          -deleteincompletescan 2
+    dependencies:
+        - build
+        - veracode_sca
+        - veracode_iac_scan
+
+veracode_sast_policy_scan:
+    image: veracode/api-wrapper-java
+    stage: veracode_sast_policy_scan
+    script:
+        - >
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname $CI_PROJECT_NAME
+          -createprofile true
+          -vid "${VERACODE_API_KEY_ID}"
+          -vkey "${VERACODE_API_KEY_SECRET}"
+          -filepath verascan/veracode-auto-pack-verademo-javascript-api-js.zip
+          -version "job ${CI_JOB_ID}"
+          -deleteincompletescan 2
+    dependencies:
+        - build
+        - veracode_sca
+        - veracode_iac_scan
+        - veracode_sast_sandbox_scan
+
+veracode_sast_pipeline_scan:
+  image: veracode/pipeline-scan:latest
+  stage: veracode_sast_policy_scan
+  script:
+    - >
+    - java -jar /opt/veracode/pipeline-scan.jar 
+        -vid "${VERACODE_API_KEY_ID}"
+        -vkey "${VERACODE_API_KEY_SECRET}"
+        --file verascan/veracode-auto-pack-verademo-javascript-api-js.zip
+  dependencies:
+        - build
+        - veracode_sca
+        - veracode_iac_scan
+        - veracode_sast_sandbox_scan
