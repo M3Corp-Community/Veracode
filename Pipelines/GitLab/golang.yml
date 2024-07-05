@@ -14,7 +14,8 @@ build:
         - ls -l
         - mkdir verascan
     after_script:
-        - cp -r * verascan
+        - shopt -s extglob
+        - cp -r */!(verascan) verascan/
     artifacts:
         paths:
             - /builds/lucas.ferreira4/vuln-goapp/verascan
@@ -25,9 +26,6 @@ veracode_sast_pipeline_scan:
   script:
     - >
     - zip -r upload.zip verascan -i "*.go" "*.mod" "*.sum"
-    - java -jar /opt/veracode/pipeline-scan.jar 
-        -vid "${VERACODE_API_KEY_ID}"
-        -vkey "${VERACODE_API_KEY_SECRET}"
-        --file upload.zip
+    - java -jar /opt/veracode/pipeline-scan.jar -vid "${VERACODE_API_KEY_ID}" -vkey "${VERACODE_API_KEY_SECRET}" --file upload.zip
   dependencies:
         - build
