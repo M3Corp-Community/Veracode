@@ -1,0 +1,33 @@
+stages:
+    - build
+    - veracode_sast_pipeline_scan
+    
+build:
+    image: bitnami/golang:1.13.7-debian-10-r7
+    stage: build
+    only:
+        - branches
+        - tags
+        - merge_requests
+    script:
+        - go mod vendor
+        - ls -l
+        - mkdir verascan
+    after_script:
+        - cp -r * verascan
+    artifacts:
+        paths:
+            - /builds/lucas.ferreira4/vuln-goapp/verascan
+
+veracode_sast_pipeline_scan:
+  image: veracode/pipeline-scan:latest
+  stage: veracode_sast_pipeline_scan
+  script:
+    - >
+    - zip -r upload.zip verascan -i "*.go" "*.mod" "*.sum"
+    - java -jar /opt/veracode/pipeline-scan.jar 
+        -vid "${VERACODE_API_KEY_ID}"
+        -vkey "${VERACODE_API_KEY_SECRET}"
+        --file upload.zip
+  dependencies:
+        - build
