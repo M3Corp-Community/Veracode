@@ -1,31 +1,40 @@
 stages:
     - build
-    - veracode_sast_pipeline_scan
+    - veracode_sast_sandbox_scan
     
 build:
     image: bitnami/golang:1.13.7-debian-10-r7
     stage: build
-    only:
-        - branches
-        - tags
-        - merge_requests
     script:
         - go mod vendor
         - ls -l
         - mkdir verascan
     after_script:
         - shopt -s extglob
-        - cp -r */!(verascan) verascan/
+        - cd verascan
+        - cp -r ../!(verascan) .
+        - ls -l
     artifacts:
         paths:
             - /builds/lucas.ferreira4/vuln-goapp/verascan
 
-veracode_sast_pipeline_scan:
-  image: veracode/pipeline-scan:latest
-  stage: veracode_sast_pipeline_scan
-  script:
-    - >
-    - zip -r upload.zip verascan -i "*.go" "*.mod" "*.sum"
-    - java -jar /opt/veracode/pipeline-scan.jar -vid "${VERACODE_API_KEY_ID}" -vkey "${VERACODE_API_KEY_SECRET}" --file upload.zip
-  dependencies:
+veracode_sast_sandbox_scan:
+    image: veracode/api-wrapper-java
+    stage: veracode_sast_sandbox_scan
+    script:
+        - >
+        - zip -r upload.zip verascan/
+        - java -jar /opt/veracode/api-wrapper.jar
+          -action UploadAndScan 
+          -appname $CI_PROJECT_NAME
+          -createprofile true
+          -vid "${VERACODE_API_KEY_ID}"
+          -vkey "${VERACODE_API_KEY_SECRET}"
+          -sandboxname $CI_COMMIT_REF_NAME 
+          -createsandbox true
+          -filepath upload.zip
+          -version "job ${CI_JOB_ID}"
+          -criticality "Medium"
+          -deleteincompletescan 2
+    dependencies:
         - build
