@@ -1,0 +1,62 @@
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  veracodeAppProfile: $(Build.DefinitionName)
+  caminhoPacote: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+  veracodeNewBaselineFile: $(Build.DefinitionName)-$(build.buildNumber).json
+
+steps:
+- task: CmdLine@2
+  inputs:
+    script: |
+      zip -r $(caminhoPacote) . -x '*.svg' '*.pdf' '*.mp4' '*.webm' '*.gif' '*.jpg' '*.ico'
+  displayName: 'Criando pacote para analise'
+
+- task: S3Download@1
+  inputs:
+    awsCredentials: '$(AWS-Credentials)'
+    regionName: 'us-east-2'
+    bucketName: '$(AWS-bucketName)'
+    globExpressions: '**/$(veracodeAppProfile)*.*'
+    targetFolder: '.'
+  displayName: 'Fazendo Download do Baseline'
+
+- script: |
+    curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+  displayName: 'Download Pipeline Scanner'
+- task: ExtractFiles@1
+  inputs:
+    archiveFilePatterns: 'pipeline-scan-LATEST.zip'
+    destinationFolder: '$(Build.ArtifactStagingDirectory)'
+    cleanDestinationFolder: false
+- script: |
+      ls -1t | grep "^$(veracodeAppProfile)" | sort -r
+      veracodeBaselineFile=$(ls -1t | grep "^$(veracodeAppProfile)" | sort -r | head -n 1)
+      echo "Antigo baseline: $veracodeBaselineFile"
+      echo "##vso[task.setvariable variable=veracodeBaselineFile]$veracodeBaselineFile"
+  displayName: 'Validando arquivos de Baseline'
+- script: |
+      echo "Novo baseline: $(veracodeNewBaselineFile)"
+      echo "Antigo baseline: $(veracodeBaselineFile)"
+      # Faz a validacao do baseline
+      if [ -f "$(veracodeBaselineFile)" ]; then
+          echo "Utilizando o baseline $(veracodeBaselineFile)"
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VID) -vkey $(VKEY) --file '$(caminhoPacote)' --issue_details true --json_output_file '$(veracodeNewBaselineFile)' --baseline_file "$(veracodeBaselineFile)"
+      else
+          echo "Nao foi localizado nenhum baseline"
+          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VID) -vkey $(VKEY) --file '$(caminhoPacote)' --issue_details true --json_output_file '$(veracodeNewBaselineFile)'
+      fi
+  displayName: 'Veracode PipelineScan'
+  continueOnError: true
+
+- task: S3Upload@1
+  inputs:
+    awsCredentials: '$(AWS-Credentials)'
+    regionName: 'us-east-2'
+    bucketName: '$(AWS-bucketName)'
+    globExpressions: '$(veracodeNewBaselineFile)'
+  displayName: 'Atualizando o Baseline'
