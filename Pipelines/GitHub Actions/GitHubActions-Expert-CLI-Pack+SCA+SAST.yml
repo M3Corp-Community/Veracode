@@ -1,0 +1,232 @@
+##Antes de iniciar, crie os seguintes secrets para o repositório:
+## "VID" com o conteúdo da VERACODE API KEY ID
+## "VKEY" com o conteúdo da VERACODE API KEY SECRET
+## "SRCCLR" com o conteúdo da chave do AGENT SCAN
+## Essas chaves devem ser geradas no portal da Veracode
+
+
+name: Veracode Demo
+on:
+  push:
+    branches:
+      - pipeline-scan
+      - policy-scan
+      - sandbox-scan
+##Nome das branches opcional, caso queira criar múltiplas branches e executar
+#cada scan em uma branch específica. Em cada stage também há um if: para
+#validar se a stage deve ser executada naquela branch.
+
+env:
+  package_path: 'verascan'
+  package_name: 'veracode-auto-pack-verademo-python-python.zip'
+## O nome da variável package_path pode ser modificado. Será criado um diretório
+# com esse nome e o conteudo do package será salvo nele.
+## O nome da variável package_name irá depender da linguagem/nome do projeto.
+# Valide no link abaixo os padrões do Veracode Package ou execute
+# uma vez e veja nos logs o nome do arquivo gerado.
+## https://docs.veracode.com/r/About_auto_packaging#packaged-artifacts
+
+## Também é possível utilizar o comando 'mv' (comentado abaixo) para renomear
+# o package gerado para um nome genérico e utilizá-lo nas tasks seguintes, porém
+# caso o comando package identifique mais de uma linguagem no repositório, ele irá
+# gerar mais de um .zip e o comando 'mv' deve ser ajustado
+
+jobs:
+  Package:
+    name: Veracode Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout https://github.com/${{ github.repository }}@${{ github.ref }}
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Veracode Package
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VKEY }}
+        run: |
+          curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+          ./veracode package --source . --output ${{env.package_path}} --trust
+          
+          # mv ${{env.package_path}}/${{env.package_name}} ${{env.package_path}}/package
+      - name: Upload artfacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artfacts
+          path: ${{env.package_path}}/${{env.package_name}}
+
+  Veracode-SCA:
+    if: github.ref == 'refs/heads/pipeline-scan'
+    name: Veracode SCA Pipeline
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+    steps:
+      - name: Checkout https://github.com/${{ github.repository }}@${{ github.ref }}
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+      # modifique esse step para instalar as dependências da aplicação antes do SCA
+        run: |
+          pip list
+          pip install pipenv
+      - name: Veracode SCA
+        env:
+          SCAN_DIR: '.'
+          SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
+          SRCCLR_SCM_REF_TYPE: 'branch'
+          SRCCLR_SCM_REF: ${{ github.ref }}
+          SRCCLR_SCM_REV: ${{ github.run_id }}
+          EXTRA_ARGS: '--recursive --update-advisor --uri-as-name' 
+        run: |
+          curl -sSL https://download.sourceclear.com/ci.sh | bash -s -- scan $EXTRA_ARGS
+        continue-on-error: true
+
+      - name: Veracode SCA - Action
+        env:
+          SRCCLR_API_TOKEN: ${{ secrets.SRCCLR_API_TOKEN }}
+        uses: veracode/veracode-sca@v2.1.10
+        with:
+          path: "./"
+          recursive: true
+          quick: false
+          create-issues: false
+          allow-dirty: true
+          update_advisor: true
+        continue-on-error: true
+
+
+  Veracode-SAST-Pipeline:
+# esse job possui diversas formas de executar o pipeline scan, com o veracode CLI, Wrapper ou Action.
+# escolha a que melhor se ajustar ao ambiente
+    # if: github.ref == 'refs/heads/pipeline-scan'
+    name: Veracode SAST Pipeline
+    runs-on: ubuntu-latest
+    needs: [Package]
+
+    steps:
+      - name: Download artfacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artfacts
+          path: ./${{env.package_path}}
+
+      - name: Pipeline Scan with CLI - default
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VKEY }}
+        run: |
+          curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+          ./veracode static scan "./${{env.package_path}}/${{env.package_name}}"
+        continue-on-error: true
+
+      - name: Pipeline Scan with CLI - custom policy
+        env:
+          VERACODE_API_KEY_ID: ${{ secrets.VID }}
+          VERACODE_API_KEY_SECRET: ${{ secrets.VKEY }}
+          POLICY_NAME: Veracode Recommended Medium
+          #POLICY_NAME: Policy-test-2
+        run: |
+          #curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+          ./veracode policy get "${{env.POLICY_NAME}}" --format json
+          ./veracode static scan "./${{env.package_path}}/${{env.package_name}}" --policy-file "${{env.POLICY_NAME}}.json"
+        continue-on-error: true
+
+      - name: Pipeline Scan with wrapper - default policy
+        env:
+          POLICY_NAME: Veracode Recommended Medium
+        run: |
+          curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -u pipeline-scan-LATEST.zip
+          java -jar pipeline-scan.jar -vid "${{ secrets.VID }}" -vkey "${{ secrets.VKEY }}" --file "./${{env.package_path}}/${{env.package_name}}" -pn "${{ env.POLICY_NAME }}" --issue_details true --json_output true
+        continue-on-error: true
+
+      - name: Pipeline Scan with wrapper - custom policy
+        env:
+          POLICY_NAME: Policy-test-2
+        run: |
+          curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -u pipeline-scan-LATEST.zip
+          java -jar pipeline-scan.jar -vid "${{ secrets.VID }}" -vkey "${{ secrets.VKEY }}" -rp "${{ env.POLICY_NAME }}"
+          java -jar pipeline-scan.jar -vid "${{ secrets.VID }}" -vkey "${{ secrets.VKEY }}" --file "./${{env.package_path}}/${{env.package_name}}" --policy_file "${{ env.POLICY_NAME }}.json" --json_output true
+        continue-on-error: true
+
+      - name: Pipeline Scan with Action by Veracode
+      # https://github.com/marketplace/actions/veracode-pipeline-scan
+        uses: veracode/Veracode-pipeline-scan-action@v1.0.15
+        with:
+          vid: "${{ secrets.VID }}"
+          vkey: "${{ secrets.VKEY }}"
+          file: "./${{env.package_path}}/${{env.package_name}}"
+          # Name of the Veracode default policy or custom-built policy to apply to the scan results.
+          veracode_policy_name: "Veracode Recommended Medium"
+          fail_build: false
+          issue_details: true
+          
+          
+  Veracode-Policy-Scan:
+# esse job possui diversas formas de executar o upload and scan, com o Java Wrapper ou Action.
+# escolha a que melhor se ajustar ao ambiente
+    if: github.ref == 'refs/heads/policy-scan'
+    name: Veracode Policy Scan
+    runs-on: ubuntu-latest
+    needs: [Package]
+
+    steps:
+      - name: Download artfacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artfacts
+          path: ./${{env.package_path}}
+
+      - name: Upload and Scan
+        env:
+          APPLICATION_NAME: Verademo-python-1
+        run: |
+          curl -L -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/24.7.14.0/vosp-api-wrappers-java-24.7.14.0.jar
+          java -jar veracode-wrapper.jar -vid "${{ secrets.VID }}" -vkey "${{ secrets.VKEY }}" -action UploadAndScan -deleteincompletescan 2 -createprofile true -appname "${{ env.APPLICATION_NAME }}" -version "${{ github.run_id }}" -filepath "./${{env.package_path}}/${{env.package_name}}"
+
+      - name: Upload and Scan - Action
+        uses: veracode/veracode-uploadandscan-action@0.2.7
+        with:
+          appname: "Verademo-python-1"
+          filepath: "./${{env.package_path}}/${{env.package_name}}"
+          vid: "${{ secrets.VID }}"
+          vkey: "${{ secrets.VKEY }}"
+          deleteincompletescan: 2
+
+    
+
+  Veracode-Sandbox-Scan:
+# esse job possui diversas formas de executar o upload and scan, com o Java Wrapper ou Action.
+# escolha a que melhor se ajustar ao ambiente
+    if: github.ref == 'refs/heads/sandbox-scan'
+    name: Veracode Sandbox Scan
+    runs-on: ubuntu-latest
+    needs: [Package]
+    strategy:
+      fail-fast: true
+    env:
+      APPLICATION_NAME: Verademo-python-1
+
+    steps:
+      - name: Download artfacts
+        uses: actions/download-artifact@v4
+        with:
+          name: artfacts
+          path: ./${{env.package_path}}
+
+      - name: Upload and Scan
+        run: |
+          curl -L -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/24.7.14.0/vosp-api-wrappers-java-24.7.14.0.jar
+          java -jar veracode-wrapper.jar -vid "${{ secrets.VID }}" -vkey "${{ secrets.VKEY }}" -action UploadAndScan -deleteincompletescan 2 -createprofile true -appname "${{ env.APPLICATION_NAME }}" -version "${{ github.run_id }}" -filepath "./${{env.package_path}}/${{env.package_name}}" -createsandbox true -sandboxname "${{ github.ref }}" 
+
+      - name: Upload and Scan - Action
+        uses: veracode/veracode-uploadandscan-action@0.2.7
+        with:
+          appname: "Verademo-python-1"
+          filepath: "./${{env.package_path}}/${{env.package_name}}"
+          vid: "${{ secrets.VID }}"
+          vkey: "${{ secrets.VKEY }}"
+          deleteincompletescan: 2
