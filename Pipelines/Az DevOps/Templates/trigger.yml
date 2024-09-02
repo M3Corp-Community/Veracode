@@ -1,0 +1,19 @@
+resources:
+  repositories:
+    - repository: TEMPLATES
+      type: git
+      name: 'DEMOs/TEMPLATES'
+      ref: main
+      trigger: none
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: Veracode
+
+stages:
+  - template: veracode.yml@TEMPLATES
