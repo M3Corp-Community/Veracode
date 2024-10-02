@@ -59,10 +59,3 @@ function New-VeracodeScaAppLink {
         Start-Sleep 5 
     }
 }
-
-# Teste
-# $workspaceName = "Teste"
-# $workspaceID = Get-VeracodeScaWorkspaceID $workspaceName
-# $scaProjects = Get-VeracodeScaProjectsList $workspaceID
-# $appProfiles = Get-VeracodeAppProfiles
-# New-VeracodeScaAppLink $appProfiles $scaProjects
