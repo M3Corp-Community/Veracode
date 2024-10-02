@@ -1,0 +1,86 @@
+pipelines:
+  default:
+    - step:
+        name: Veracode SCA
+        image: node:lts
+        script:
+          - curl -sSL https://download.sourceclear.com/ci.sh | bash -s scan --update-advisor || true
+        after-script:
+          - echo "Software Composition Analysis done! See the details results in Veracode Platform"
+    - step:
+        name: Veracode SAST Sandbox Scan
+        image: veracode/api-wrapper-java
+        script:
+          - echo "Veracode SAST Policy Scan"
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - ls -l
+          - java -jar /opt/veracode/api-wrapper.jar
+            -action UploadAndScan
+            -appname "$BITBUCKET_REPO_FULL_NAME"
+            -createprofile true
+            -vid "${VERACODE_ID}"
+            -vkey "${VERACODE_KEY}"
+            -sandboxname "$BITBUCKET_BRANCH"
+            -createsandbox true
+            -filepath upload.zip
+            -version "Build Number $BITBUCKET_BUILD_NUMBER"
+            -deleteincompletescan 2
+        after-script:
+          - echo "Application artifact sent to Veracode sucessfuly!"
+
+    - step:
+        name: Veracode SAST Policy Scan
+        image: veracode/api-wrapper-java
+        script:
+          - echo "Veracode SAST Policy Scan"
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - ls -l
+          - java -jar /opt/veracode/api-wrapper.jar
+            -action UploadAndScan
+            -appname "$BITBUCKET_REPO_FULL_NAME"
+            -createprofile true
+            -vid "${VERACODE_ID}"
+            -vkey "${VERACODE_KEY}"
+            -filepath upload.zip
+            -version "Build Number $BITBUCKET_BUILD_NUMBER"
+            -deleteincompletescan 2
+        after-script:
+          - echo "Application artifact sent to Veracode sucessfuly!"
+    - step:
+        name: Veracode SAST Pipeline Scan
+        image: veracode/pipeline-scan
+        script:
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - ls -l
+          - java -jar /opt/veracode/pipeline-scan.jar --veracode_api_id "${VERACODE_ID}" --veracode_api_key "${VERACODE_KEY}" --file upload.zip --issue_details true || true
+    - step:
+        name: Veracode IaC
+        image: veracode/api-wrapper-java
+        script:
+            - export VERACODE_API_KEY_ID="${VERACODE_ID}"
+            - export VERACODE_API_KEY_SECRET="${VERACODE_KEY}"
+            - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            - ./veracode scan --source . --type directory --format table
+        after-script:
+          - echo "IaC scan, see your results!"
+    - step:
+        name: Veracode SBOM SDPX
+        image: veracode/api-wrapper-java
+        script:
+            - export VERACODE_API_KEY_ID="${VERACODE_ID}"
+            - export VERACODE_API_KEY_SECRET="${VERACODE_KEY}"
+            - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            - ./veracode sbom --source . --type directory --format spdx-json
+        after-script:
+          - echo "SBOM SPDX, see your results!"
+
+    - step:
+        name: Veracode SBOM CYCLONEDX
+        image: veracode/api-wrapper-java
+        script:
+            - export VERACODE_API_KEY_ID="${VERACODE_ID}"
+            - export VERACODE_API_KEY_SECRET="${VERACODE_KEY}"
+            - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            - ./veracode sbom --source . --type directory --format cyclonedx-json
+        after-script:
+          - echo "SBOM CYCLONEDX, see your results!"
