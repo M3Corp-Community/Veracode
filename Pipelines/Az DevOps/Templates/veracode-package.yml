@@ -1,21 +1,20 @@
-jobs:
+stages:
+- stage: Veracode
+  displayName: Veracode
+  jobs:
   - job: Veracode
     steps:
-    - task: DownloadBuildArtifacts@1
-      inputs:
-        buildType: 'current'
-        downloadType: 'single'
-        artifactName: 'drop'
-        downloadPath: '$(System.ArtifactsDirectory)'
-      displayName: 'Carregando arquivos'
-
     - script: |
         curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
-        curl -O -L https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
-        unzip -o pipeline-scan-LATEST.zip
-      displayName: 'Download Veracode'
-      continueOnError: true
-
+        if ("${{ variables['Agent.OS'] }}" -eq "Windows_NT") {
+          $ProgressPreference = "silentlyContinue"; iex ((New-Object System.Net.WebClient).DownloadString('https://tools.veracode.com/veracode-cli/install.ps1'))
+          veracode configure
+        } else {
+          curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+          ./veracode configure
+        }
+      displayName: 'Download Veracode Tools'
+    
     - script: |
         if [ $(Build.SourceBranchName) == 'main' ]; then
             java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname $(veracodeAppProfile) -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -teams "$(veracodeTeams)"
@@ -27,15 +26,20 @@ jobs:
     - powershell: |
         if ("${{ variables['Agent.OS'] }}" -eq "Windows_NT") {
           iex ((New-Object System.Net.WebClient).DownloadString('https://download.srcclr.com/ci.ps1'))
-          srcclr scan --update-advisor --allow-dirty --quick
         } else {
-          curl -sSL https://download.srcclr.com/ci.sh | bash
+          curl -sSL https://download.srcclr.com/ci.sh | bash -s scan --update-advisor --allow-dirty --quick
         }
-        srcclr scan --update-advisor --allow-dirty --quick
+        srcclr scan --update-advisor --allow-dirty
       displayName: 'Veracode SCA'
       continueOnError: true
 
     - script: |
-          java -jar $(Build.ArtifactStagingDirectory)/pipeline-scan.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) --file '$(caminhoPacote)' --issue_details true 
+          if ("${{ variables['Agent.OS'] }}" -eq "Windows_NT") {
+            veracode static scan --file '$(caminhoPacote)' --issue_details true
+          } else {
+            curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+            ./veracode static scan --file '$(caminhoPacote)' --issue_details true
+          }
+          
       displayName: 'Veracode PipelineScan'
       continueOnError: true

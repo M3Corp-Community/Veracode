@@ -119,20 +119,23 @@ function New-VeracodeTribe {
     return $tribeID
 }
 
-function Get-VeracodeAllSquadsInTribes {
+function Add-VeracodeSquadsInWorkspaceTribe {
     param (
         $allTribes
     )
-    $returnInfo = @()
     foreach ($tribe in $allTribes) {
-        $tribeID = $tribe.bu_id
         $tribeName = $tribe.bu_name
-        $tribeTeams = $tribe.teams.team_name
-        foreach ($tribeTeam in $tribeTeams) {
-            $returnInfo += "$tribeTeam;$tribeID;$tribeName"
+        Write-Host "Configurando tribo $tribeName"
+        $workspaceName = $tribeName -replace ' ', '_'
+        $workspaceID = Get-VeracodeScaWorkspaceID $workspaceName
+        if ($workspaceID) {
+            $tribeTeams = $tribe.teams.team_name
+            foreach ($tribeTeam in $tribeTeams) {
+                Write-Host "Add Squad $tribeTeam no workspace $workspaceName"
+                Add-VeracodeTeamsInScaWorkspace $workspaceID $tribeTeam
+            }
         }
     }
-    return $returnInfo
 }
 
 # Fluxo 1
@@ -150,4 +153,18 @@ $scaToken = New-VeracodeScaAgent $workspaceID
 # Fluxo 3
 # Atualiza a lista de times que podem acessar um workspace com base nas tribos
 $allTribes = Get-VeracodeTribes
-$allSquadsList = Get-VeracodeAllSquadsInTribes $allTribes
+Add-VeracodeSquadsInWorkspaceTribe $allTribes
+
+# Fluxo 4
+# Para cada tribo atual, cria um workspace
+$allTribes = Get-VeracodeTribes
+$logNamesAndTokens = ""
+foreach ($tribe in $allTribes) {
+    $tribeName = $tribe.bu_name
+    $workspaceName = $tribeName -replace ' ', '_'
+    New-VeracodeScaWorkspace $workspaceName
+    # Gera o LOG com o token para cadastro em um cofre
+    $workspaceID = Get-VeracodeScaWorkspaceID $tribeName
+    $scaToken = New-VeracodeScaAgent $workspaceID
+    $logNamesAndTokens += "$workspaceName;$scaToken`n"
+}
