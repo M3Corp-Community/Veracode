@@ -12,7 +12,7 @@ pipelines:
         image: veracode/api-wrapper-java
         script:
           - echo "Veracode SAST Policy Scan"
-          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json"
           - ls -l
           - java -jar /opt/veracode/api-wrapper.jar
             -action UploadAndScan
@@ -33,7 +33,7 @@ pipelines:
         image: veracode/api-wrapper-java
         script:
           - echo "Veracode SAST Policy Scan"
-          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json"
           - ls -l
           - java -jar /opt/veracode/api-wrapper.jar
             -action UploadAndScan
@@ -50,7 +50,7 @@ pipelines:
         name: Veracode SAST Pipeline Scan
         image: veracode/pipeline-scan
         script:
-          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json" "*.es" "*.es6" "*.handlebars" "*.hbs" "*.hjs" "*.map" "*.mjs" "*.jsx"
+          - zip -r upload.zip . -x "node_modules/" -x "*node_modules" -i "*.js" "*.ts" "*.tsx" "*.hmtl" "*.css" "*.vue" "*.json"
           - ls -l
           - java -jar /opt/veracode/pipeline-scan.jar --veracode_api_id "${VERACODE_ID}" --veracode_api_key "${VERACODE_KEY}" --file upload.zip --issue_details true || true
     - step:
