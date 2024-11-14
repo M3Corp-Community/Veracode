@@ -1,0 +1,28 @@
+name: Veracode_Set_Policy
+on:
+  workflow_dispatch:
+
+jobs:
+  Veracode:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+      
+      - name: Download Veracode Wrapper
+        run: |
+          curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run Veracode Update Script
+        env:
+          VERACODE_APP_PROFILE: Github - ${{ github.repository }}
+          VERACODE_POLICY: ${{ secrets.veracodePolicy }}
+          VID: ${{ secrets.VeracodeID }}
+          VKEY: ${{ secrets.VeracodeKey }}
+        run: |
+          python setPolicy.py "$VERACODE_APP_PROFILE" "$VERACODE_POLICY"
