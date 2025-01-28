@@ -24,4 +24,4 @@ function Get-VeracodeUserWithRole {
 }
 
 # Ex:
-Get-VeracodeUserWithRole "extmitigationapprover"
+Get-VeracodeUserWithRole "extsubmitter"
