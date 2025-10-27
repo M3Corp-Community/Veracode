@@ -1,0 +1,18 @@
+stages:
+    - Devici_Scan
+    
+Devici_Scan:
+    image: openjdk:8
+    stage: Devici_Scan
+    script:
+      -  export CG_CLIENT_ID="${CG_CLIENT_ID}" 
+      -  export CG_CLIENT_SECRET="${CG_CLIENT_SECRET}"
+      
+      -  curl -L -O https://devici-code-genius-source.s3.us-east-2.amazonaws.com/v0.12.1/code-genius-v0.12.1.zip
+      -  unzip code-genius-v0.12.1.zip
+      -  ls
+      -  mv code_genius-linux-amd64 code_genius
+      -  chmod +x code_genius 
+      
+      -  echo [+] Scanning directory
+      -  ./code_genius repo .
