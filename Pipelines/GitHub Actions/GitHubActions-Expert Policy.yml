@@ -37,19 +37,13 @@ jobs:
         with:
           name: pacoteVeracode
       - name: UploadAndScan
-        uses: veracode/veracode-uploadandscan-action@master # Faz a analise da Veracode
-        env:
-          VeracodeID: ${{ secrets.VeracodeID }} # Lembrar de criar as credenciais no Secrets
-          VeracodeKey: ${{ secrets.VeracodeKey }}
-          AppName: Github Actions - ${{ github.repository }}
+        uses: veracode/veracode-uploadandscan-action@master
         with:
-          vid: '$VeracodeID'
-          vkey: '$VeracodeKey'
-          criticality: 'VeryHigh'
-          appname: '$AppName'
-          createsandbox: true
+          appname: '${{ github.repository }}'
+          createprofile: true
           filepath: 'veracode.zip'
-          version: ${{ github.run_id }}
+          vid: '${{ secrets.VeracodeID }}'
+          vkey: '${{ secrets.VeracodeKey }}'
 
   Veracode_PipelineScan:
     runs-on: ubuntu-latest
