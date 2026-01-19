@@ -79,7 +79,6 @@ function Get-VeracodeScanData {
     return $VeracodeData
 }
 
-
 function Get-CostOfRemediation {
     param (
         [Parameter(Mandatory)]
@@ -267,6 +266,16 @@ $TeamComposition = @(
 $risk = Get-VeracodeRiskScore $VeracodeData
 $remediation = Get-CostOfRemediation -VeracodeData $VeracodeData -VulnerabilitiesFixed 10 -MTTRHours 6 -TeamComposition $TeamComposition
 $avoided = Get-CostAvoided -VeracodeData $VeracodeData -AverageIncidentCost 5000000
-$risk | Format-Table AppName, ScanDate, RiskScore
+$risk | Format-Table AppName, ScanDate, RiskScore, VeryHigh, High, Medium -AutoSize
 $remediation | Format-Table AppName, RemediationCost
 $avoided | Format-Table AppName, EstimatedCostAvoided
+
+# Excel:
+$risk | Export-Csv risk.csv -NoTypeInformation
+$remediation | Export-Csv remediation.csv -NoTypeInformation
+$avoided | Export-Csv avoided.csv -NoTypeInformation
+
+# GridView
+$risk | Out-GridView -Title "Risk Score por Aplicação"
+$remediation | Out-GridView -Title "Custo de Remediação"
+$avoided | Out-GridView -Title "Custo Evitado Estimado"
