@@ -66,11 +66,11 @@ function Get-VeracodeSCAResults {
 
 # Teste
 $allProfiles = Get-VeracodeAppProfiles
-$profilesInTeam = Get-VeracodeProfilesInTeam "Localiza" $allProfiles
+$profilesInTeam = Get-VeracodeProfilesInTeam "Time" $allProfiles
 $profilesInBU = Get-VeracodeProfilesInBU "Not Specified" $allProfiles
 Show-VeracodeAppBU $profilesInTeam
 $allBUs = Get-VeracodeBUs
-$buID = Get-VeracodeBuID "Localiza" $allBUs
+$buID = Get-VeracodeBuID "Time" $allBUs
 
 $profilesInBU = Get-VeracodeProfilesInBU "Not Specified" $allProfiles
-$profilesInTeam = Get-VeracodeProfilesInTeam "Localiza" $profilesInBU
+$profilesInTeam = Get-VeracodeProfilesInTeam "Time" $profilesInBU
