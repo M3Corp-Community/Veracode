@@ -43,8 +43,32 @@ function Sync-VeracodeAppTeam {
         $teamGUID
     )
 
-    http --auth-type=veracode_hmac PATCH "https://api.veracode.com/appsec/v1/applications/$appGUID" `
+    $apiReturn = http --auth-type=veracode_hmac PATCH "https://api.veracode.com/appsec/v1/applications/$appGUID" `
         add_teams:='["'$teamGUID'"]' | ConvertFrom-Json
+
+    $team = $apiReturn.profile.teams | Where-Object { $_.guid -eq $teamGUID }
+
+    if ($team) {
+
+        Write-Host "SUCESSO: Time $($team.team_name) associado à aplicação $($apiReturn.profile.name)"
+
+        return @{
+            status    = "sucesso"
+            aplicacao = $apiReturn.profile.name
+            time      = $team.team_name
+        }
+
+    } else {
+
+        Write-Host "ERRO: Time $teamGUID não aparece associado à aplicação $($apiReturn.profile.name)"
+
+        return @{
+            status    = "erro"
+            aplicacao = $apiReturn.profile.name
+            teamGUID  = $teamGUID
+        }
+
+    }
 }
 
 # Fluxo:
