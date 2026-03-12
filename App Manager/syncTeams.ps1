@@ -49,9 +49,7 @@ function Sync-VeracodeAppTeam {
     $team = $apiReturn.profile.teams | Where-Object { $_.guid -eq $teamGUID }
 
     if ($team) {
-
         Write-Host "SUCESSO: Time $($team.team_name) associado à aplicação $($apiReturn.profile.name)"
-
         return @{
             status    = "sucesso"
             aplicacao = $apiReturn.profile.name
@@ -59,9 +57,7 @@ function Sync-VeracodeAppTeam {
         }
 
     } else {
-
         Write-Host "ERRO: Time $teamGUID não aparece associado à aplicação $($apiReturn.profile.name)"
-
         return @{
             status    = "erro"
             aplicacao = $apiReturn.profile.name
