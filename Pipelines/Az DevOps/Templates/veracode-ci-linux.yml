@@ -1,0 +1,43 @@
+stages:
+- stage: Veracode
+  displayName: Veracode
+  jobs:
+  - job: Veracode
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: |
+          zip -r $(caminhoPacote) . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' -x '*/node_modules/*' '*/.git/*' '*/dist/*'
+      displayName: 'Criando pacote para analise'
+
+    - script: |
+        curl -o veracode-wrapper.jar https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/23.4.11.2/vosp-api-wrappers-java-23.4.11.2.jar
+      displayName: 'Download Veracode Wrapper'
+
+    - script: |
+        if [ $(Build.SourceBranchName) == 'main' ]; then
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -teams "$(veracodeTeams)" -deleteincompletescan 2
+          else
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -teams "$(veracodeTeams)" -createsandbox true -sandboxname "$(Build.SourceBranchName)" -deleteincompletescan 2
+          fi
+      displayName: 'Veracode U&S'
+      continueOnError: true
+
+    - script: |
+        curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      displayName: 'Download Veracode CLI'
+
+    - script: |
+          curl -sSL https://download.srcclr.com/ci.sh | bash scan --update-advisor --allow-dirty --recursive
+      displayName: 'Veracode SCA'
+      continueOnError: true
+
+    - script: |
+        ./veracode scan --type directory --source ./ --format table
+      displayName: 'Veracode IaC'
+      continueOnError: true
+
+    - script: |
+          ./veracode static scan "$(caminhoPacote)" 
+      displayName: 'Veracode SAST'
+      continueOnError: true
