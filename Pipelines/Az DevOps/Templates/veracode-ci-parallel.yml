@@ -1,0 +1,67 @@
+stages:
+- stage: Veracode
+  displayName: Veracode
+  jobs:
+  - job: Veracode
+    steps:
+    - task: CmdLine@2
+      inputs:
+        script: |
+          zip -r $(caminhoPacote) . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' -x '*/node_modules/*' '*/.git/*' '*/dist/*'
+      displayName: 'Criando pacote para analise'
+
+    - script: |
+        LATEST_VERSION=$(curl -s https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml | grep -oPm1 "(?<=<latest>)[^<]+")
+        curl -L -o veracode-wrapper.jar "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/${LATEST_VERSION}/vosp-api-wrappers-java-${LATEST_VERSION}.jar"
+      displayName: 'Download Veracode Wrapper'
+
+    - script: |
+        if [ $(Build.SourceBranchName) == 'main' ]; then
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -teams "$(veracodeTeams)" -deleteincompletescan 2
+          else
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -teams "$(veracodeTeams)" -createsandbox true -sandboxname "$(Build.SourceBranchName)" -deleteincompletescan 2
+          fi
+      displayName: 'Veracode U&S'
+      continueOnError: true
+
+    - script: |
+        curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      displayName: 'Download Veracode CLI'
+
+    - script: |
+        set +e
+
+        (
+          echo "Running Veracode SCA..."
+                curl -sSL https://download.srcclr.com/ci.sh | bash -s -- scan --update-advisor --allow-dirty --recursive
+        ) &
+        PID_SCA=$!
+
+        (
+          echo "Running Veracode IaC..."
+          ./veracode scan --type directory --source ./ --format table
+        ) &
+        PID_IAC=$!
+
+        (
+          echo "Running Veracode SAST..."
+          ./veracode static scan "$(caminhoPacote)"
+        ) &
+        PID_SAST=$!
+
+        wait $PID_SCA
+        SCA_EXIT=$?
+
+        wait $PID_IAC
+        IAC_EXIT=$?
+
+        wait $PID_SAST
+        SAST_EXIT=$?
+
+        echo "SCA Exit Code: $SCA_EXIT"
+        echo "IaC Exit Code: $IAC_EXIT"
+        echo "SAST Exit Code: $SAST_EXIT"
+
+        exit 0
+      displayName: 'Veracode Parallel Scans'
+      continueOnError: true
