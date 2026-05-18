@@ -11,17 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Empacotar arquivos para Veracode
         run: |
-          zip -r veracode.zip . \
-            -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' \
-              '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' \
-              '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' \
-              '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' \
-              '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' \
-              '*.profile' '*.install' '*.engine' '*.theme' \
-              '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' \
-            -x '*/node_modules/*' \
-              '*/.git/*' \
-              '*/dist/*'
+          zip -r veracode.zip . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' -x '*/node_modules/*' '*/.git/*' '*/dist/*' '*test*' '*Test*' '*TEST*' '*teste*' '*Teste*' '*TESTE*'
       - name: Publicando Artefato
         uses: actions/upload-artifact@v4
         with:

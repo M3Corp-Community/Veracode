@@ -7,7 +7,7 @@ stages:
     - task: CmdLine@2
       inputs:
         script: |
-          zip -r $(caminhoPacote) . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' -x '*/node_modules/*' '*/.git/*' '*/dist/*'
+          zip -r $(caminhoPacote) . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' -x '*/node_modules/*' '*/.git/*' '*/dist/*' '*test*' '*Test*' '*TEST*' '*teste*' '*Teste*' '*TESTE*'
       displayName: 'Criando pacote para analise'
 
     - script: |
@@ -34,7 +34,21 @@ stages:
       continueOnError: true
 
     - script: |
-        ./veracode scan --type directory --source ./ --format table
+        ORIGINAL_DIR=$(pwd)
+        PARENT_DIR=$(dirname "$ORIGINAL_DIR")
+        ORIGINAL_NAME=$(basename "$ORIGINAL_DIR")
+        PIPELINE_DIR="$(Build.DefinitionName)"
+
+        cd "$PARENT_DIR"
+        mv "$ORIGINAL_NAME" "$PIPELINE_DIR"
+        cd "$PIPELINE_DIR"
+        echo "pasta:$(pwd)"
+
+        ./veracode scan --type directory --source "$(pwd)" --format table
+
+        cd "$PARENT_DIR"
+        mv "$PIPELINE_DIR" "$ORIGINAL_NAME"
+        cd "$ORIGINAL_DIR"
       displayName: 'Veracode IaC'
       continueOnError: true
 

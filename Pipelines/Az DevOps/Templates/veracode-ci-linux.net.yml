@@ -1,0 +1,92 @@
+stages:
+- stage: Veracode
+  displayName: Veracode
+  jobs:
+  - job: Veracode
+    steps:
+    - script: |
+        mkdir -p "$(Build.ArtifactStagingDirectory)"
+        TEMP_DIR=$(mktemp -d)
+
+        find . -type f -name "*.dll" \
+          ! -iname "*Microsoft*" \
+          ! -iname "*UnitTest*" \
+          ! -iname "*Xunit*" \
+          ! -iname "*Test*" \
+          ! -path "*/obj/*" \
+          ! -path "*/ref/*" \
+          ! -path "*/refint/*" \
+          ! -path "*/node_modules/*" \
+          ! -path "*/.git/*" \
+          ! -path "*/TestResults/*" \
+          | while read -r dllFile; do
+
+              pdbFile="${dllFile%.dll}.pdb"
+
+              if [ -f "$pdbFile" ]; then
+                cp --parents "$dllFile" "$TEMP_DIR"
+                cp --parents "$pdbFile" "$TEMP_DIR"
+
+                for ext in deps.json runtimeconfig.json; do
+                  auxFile="${dllFile%.dll}.${ext}"
+                  [ -f "$auxFile" ] && cp --parents "$auxFile" "$TEMP_DIR"
+                done
+
+                webConfig="$(dirname "$dllFile")/web.config"
+                [ -f "$webConfig" ] && cp --parents "$webConfig" "$TEMP_DIR"
+              fi
+            done
+
+        cd "$TEMP_DIR"
+        zip -r "$(caminhoPacote)" .
+
+        echo "ZIP criado:"
+        ls -lh "$(caminhoPacote)"
+      displayName: 'Preparar pacote Veracode'
+
+    - script: |
+        LATEST_VERSION=$(curl -s https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml | grep -oPm1 "(?<=<latest>)[^<]+")
+        curl -L -o veracode-wrapper.jar "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/${LATEST_VERSION}/vosp-api-wrappers-java-${LATEST_VERSION}.jar"
+      displayName: 'Download Veracode Wrapper'
+
+    - script: |
+        if [ $(Build.SourceBranchName) == 'main' ]; then
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -deleteincompletescan 2
+          else
+            java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -createsandbox true -sandboxname "$(Build.SourceBranchName)" -deleteincompletescan 2
+          fi
+      displayName: 'Veracode U&S'
+      continueOnError: true
+
+    - script: |
+        curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+      displayName: 'Download Veracode CLI'
+
+    - script: |
+          curl -sSL https://download.srcclr.com/ci.sh | bash scan --update-advisor --allow-dirty --recursive
+      displayName: 'Veracode SCA'
+      continueOnError: true
+
+    - script: |
+        ORIGINAL_DIR=$(pwd)
+        PARENT_DIR=$(dirname "$ORIGINAL_DIR")
+        ORIGINAL_NAME=$(basename "$ORIGINAL_DIR")
+        PIPELINE_DIR="$(Build.DefinitionName)"
+
+        cd "$PARENT_DIR"
+        mv "$ORIGINAL_NAME" "$PIPELINE_DIR"
+        cd "$PIPELINE_DIR"
+        echo "pasta:$(pwd)"
+
+        ./veracode scan --type directory --source "$(pwd)" --format table
+
+        cd "$PARENT_DIR"
+        mv "$PIPELINE_DIR" "$ORIGINAL_NAME"
+        cd "$ORIGINAL_DIR"
+      displayName: 'Veracode IaC'
+      continueOnError: true
+
+    - script: |
+          ./veracode static scan "$(caminhoPacote)"
+      displayName: 'Veracode SAST'
+      continueOnError: true

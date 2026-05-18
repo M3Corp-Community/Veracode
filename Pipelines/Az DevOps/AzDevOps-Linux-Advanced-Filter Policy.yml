@@ -29,7 +29,7 @@ steps:
   inputs:
     script: |
       export SRCCLR_SCM_NAME=$(veracodeAppProfile)
-      curl -sSL https://download.sourceclear.com/ci.sh | bash -s – scan --update-advisor --allow-dirty
+      curl -sSL https://download.sourceclear.com/ci.sh | bash scan --update-advisor --allow-dirty --recursive
   displayName: 'Veracode SCA'
   continueOnError: true
 
