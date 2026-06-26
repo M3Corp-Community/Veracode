@@ -1,0 +1,110 @@
+# Definicao dos stages
+stages:
+  - Artifact
+  - SAST
+
+variables:
+  APP_Profile: "${CI_PROJECT_NAME}"
+  Caminho_Arquivo: "verademo.zip"
+
+# Gera o ZIP conforme recomendação da Veracode
+packaging:
+  image: alpine:latest
+  stage: Artifact
+  before_script:
+    - apk add --no-cache zip
+    - mkdir -p target
+  script:
+    - |
+      zip -r "$Caminho_Arquivo" . \
+        -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' \
+           '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' \
+           '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' \
+           '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' \
+           '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' \
+        -x '*/node_modules/*' \
+           '*/.git/*' \
+           '*/dist/*' \
+           '*test*' \
+           '*Test*' \
+           '*TEST*' \
+           '*teste*' \
+           '*Teste*' \
+           '*TESTE*'
+  artifacts:
+    paths:
+      - $Caminho_Arquivo
+
+# Utiliza o SCA para fazer a analise de componentes de terceiros
+Veracode_SCA:
+  image: eclipse-temurin:8-jre
+  stage: Artifact
+  when: always
+  script:
+    - curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s -- scan --update-advisor
+
+# Executa apenas na branch principal
+Veracode_Plataforma:
+  image: veracode/api-wrapper-java
+  stage: SAST
+  dependencies:
+    - packaging
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - |
+      java -jar /opt/veracode/api-wrapper.jar \
+        -action UploadAndScan \
+        -vid "${VERACODE_API_ID}" \
+        -vkey "${VERACODE_API_KEY}" \
+        -appname "${APP_Profile}" \
+        -createprofile true \
+        -autoscan true \
+        -criticality VeryHigh \
+        -filepath "${Caminho_Arquivo}" \
+        -deleteincompletescan 2 \
+        -version "${CI_JOB_ID}"
+
+# Executa nas demais branches criando sandbox
+Veracode_Sandbox:
+  image: veracode/api-wrapper-java
+  stage: SAST
+  dependencies:
+    - packaging
+  rules:
+    - if: '$CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
+  script:
+    - |
+      java -jar /opt/veracode/api-wrapper.jar \
+        -action UploadAndScan \
+        -vid "${VERACODE_API_ID}" \
+        -vkey "${VERACODE_API_KEY}" \
+        -appname "${APP_Profile}" \
+        -createprofile true \
+        -autoscan true \
+        -criticality VeryHigh \
+        -filepath "${Caminho_Arquivo}" \
+        -deleteincompletescan 2 \
+        -version "${CI_JOB_ID}" \
+        -createsandbox true \
+        -sandboxname "${CI_COMMIT_REF_NAME}"
+
+# Utiliza o Pipeline Scan para uma analise mais rapida e validar quebra por erros encontrados
+Veracode_SAST:
+  image: maven:3.9.9-eclipse-temurin-21
+  stage: SAST
+  dependencies:
+    - packaging
+  when: always
+  before_script:
+    - apt-get update
+    - apt-get install -y unzip
+  script:
+    - curl -O https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+    - unzip pipeline-scan-LATEST.zip pipeline-scan.jar
+    - |
+      java -jar pipeline-scan.jar \
+        --veracode_api_id "${VERACODE_API_ID}" \
+        --veracode_api_key "${VERACODE_API_KEY}" \
+        --file "${Caminho_Arquivo}" \
+        --issue_details true
