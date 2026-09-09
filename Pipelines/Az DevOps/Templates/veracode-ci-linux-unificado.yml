@@ -145,7 +145,7 @@ stages:
       displayName: 'Download Veracode Wrapper'
 
     - script: |
-        if [ $(Build.SourceBranchName) == 'main' ]; then
+        if [[ "$(Build.SourceBranchName)" == "main" || "$(Build.SourceBranchName)" == "master" ]]; then
             java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -deleteincompletescan 2 -teams "$(veracodeTeams)"
           else
             java -jar veracode-wrapper.jar -vid $(VERACODE_API_KEY_ID) -vkey $(VERACODE_API_KEY_SECRET) -action uploadandscan -appname "$(Build.DefinitionName)" -createprofile true  -version $(build.buildNumber) -filepath $(caminhoPacote) -createsandbox true -sandboxname "$(Build.SourceBranchName)" -deleteincompletescan 2 -teams "$(veracodeTeams)"
@@ -158,7 +158,7 @@ stages:
       displayName: 'Download Veracode CLI'
 
     - script: |
-          curl -sSL https://download.srcclr.com/ci.sh | bash scan --update-advisor --allow-dirty --recursive
+          curl -sSL https://download.srcclr.com/ci.sh | bash -s -- scan --update-advisor --allow-dirty --recursive
       displayName: 'Veracode SCA'
       continueOnError: true
 

@@ -1,6 +1,7 @@
 # Definicao dos stages
 stages:
-  - Artifact
+  - Package
+  - Deps_IaC
   - SAST
 
 variables:
@@ -10,7 +11,7 @@ variables:
 # Gera o ZIP conforme recomendação da Veracode
 packaging:
   image: alpine:latest
-  stage: Artifact
+  stage: Package
   before_script:
     - apk add --no-cache zip
     - mkdir -p target
@@ -38,7 +39,8 @@ packaging:
 # Utiliza o SCA para fazer a analise de componentes de terceiros
 Veracode_SCA:
   image: eclipse-temurin:8-jre
-  stage: Artifact
+  stage: Deps_IaC
+  needs: []
   when: always
   script:
     - curl -sSL 'https://download.sourceclear.com/ci.sh' | bash -s -- scan --update-advisor
@@ -47,8 +49,9 @@ Veracode_SCA:
 Veracode_Plataforma:
   image: veracode/api-wrapper-java
   stage: SAST
-  dependencies:
-    - packaging
+  needs:
+    - job: packaging
+      artifacts: true
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
   script:
@@ -69,8 +72,9 @@ Veracode_Plataforma:
 Veracode_Sandbox:
   image: veracode/api-wrapper-java
   stage: SAST
-  dependencies:
-    - packaging
+  needs:
+    - job: packaging
+      artifacts: true
   rules:
     - if: '$CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH'
   script:
@@ -89,12 +93,51 @@ Veracode_Sandbox:
         -createsandbox true \
         -sandboxname "${CI_COMMIT_REF_NAME}"
 
+# Utiliza o Veracode IaC para analisar infraestrutura como codigo
+Veracode_IaC:
+  image: maven:3.9.9-eclipse-temurin-21
+  stage: Deps_IaC
+  needs: []
+  when: always
+  allow_failure: true
+  script:
+    - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+    - |
+      export VERACODE_API_KEY_ID="${VERACODE_API_ID}"
+      export VERACODE_API_KEY_SECRET="${VERACODE_API_KEY}"
+
+      ORIGINAL_DIR="${CI_PROJECT_DIR:-$(pwd)}"
+      PARENT_DIR="$(dirname "$ORIGINAL_DIR")"
+      ORIGINAL_NAME="$(basename "$ORIGINAL_DIR")"
+      PIPELINE_DIR="${APP_Profile:-$CI_PROJECT_NAME}"
+
+      restore_project_dir() {
+        cd "$PARENT_DIR"
+        if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ] && [ -d "$PIPELINE_DIR" ]; then
+          mv "$PIPELINE_DIR" "$ORIGINAL_NAME"
+        fi
+      }
+      trap restore_project_dir EXIT
+
+      cd "$PARENT_DIR"
+      if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ]; then
+        mv "$ORIGINAL_NAME" "$PIPELINE_DIR"
+      fi
+      cd "$PIPELINE_DIR"
+      echo "pasta:$(pwd)"
+
+      ./veracode scan --type directory --source "$(pwd)" --format table
+
+      restore_project_dir
+      trap - EXIT
+
 # Utiliza o Pipeline Scan para uma analise mais rapida e validar quebra por erros encontrados
 Veracode_SAST:
   image: maven:3.9.9-eclipse-temurin-21
   stage: SAST
-  dependencies:
-    - packaging
+  needs:
+    - job: packaging
+      artifacts: true
   when: always
   before_script:
     - apt-get update
