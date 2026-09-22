@@ -1,0 +1,172 @@
+# Definição dos stages
+stages:
+    - Veracode_Package
+    - Veracode_Scan
+
+
+# Cria o pacote Veracode contendo arquivos fonte e assemblies .NET com PDB
+packaging:
+    image: ubuntu:24.04
+    stage: Veracode_Package
+
+    before_script:
+        - apt-get update
+        - apt-get install -y zip
+
+    script:
+        - |
+          set -euo pipefail
+
+          ORIGINAL_DIR=$(pwd)
+          PACKAGE_PATH="$ORIGINAL_DIR/veracode.zip"
+
+          rm -f "$PACKAGE_PATH"
+
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "$TEMP_DIR"' EXIT
+
+          echo "Copiando arquivos fonte..."
+
+          find . -type f \
+            \( -iname "*.py" -o -iname "*.html" -o -iname "*.htm" -o -iname "*.asp" -o -iname "*.cjs" -o -iname "*.css" -o -iname "*.ehtml" -o -iname "*.es" -o -iname "*.es6" -o -iname "*.handlebars" -o -iname "*.hbs" -o -iname "*.hjs" -o -iname "*.js" -o -iname "*.jsx" -o -iname "*.json" -o -iname "*.jsp" -o -iname "*.jspx" -o -iname "*.java" -o -iname "*.map" -o -iname "*.mjs" -o -iname "*.mustache" -o -iname "*.ts" -o -iname "*.tsx" -o -iname "*.vue" -o -iname "*.xhtml" -o -iname "*.lock" -o -iname "*.module" -o -iname "*.inc" -o -iname "*.profile" -o -iname "*.install" -o -iname "*.engine" -o -iname "*.theme" -o -iname "*.php4" -o -iname "*.php5" -o -iname "*.php7" -o -iname "*.phtml" -o -iname "*.txt" \) \
+            ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" ! -ipath "*test*" ! -ipath "*teste*" ! -iname "*test*" ! -iname "*teste*" \
+            -exec cp --parents {} "$TEMP_DIR" \;
+
+          echo "Selecionando assemblies .NET com PDB..."
+
+          declare -A SELECTED_DLL
+          declare -A SELECTED_SCORE
+
+          while IFS= read -r -d '' dllFile; do
+            pdbFile="${dllFile%.dll}.pdb"
+
+            if [[ ! -f "$pdbFile" ]]; then
+              continue
+            fi
+
+            dllName=$(basename "$dllFile")
+            dllKey=$(printf '%s' "$dllName" | tr '[:upper:]' '[:lower:]')
+            dllMtime=$(stat -c %Y "$dllFile")
+            pathScore=0
+
+            case "$dllFile" in
+              */bin/Release/*|*/bin/release/*)
+                pathScore=2
+                ;;
+              */bin/*)
+                pathScore=1
+                ;;
+            esac
+
+            score="${pathScore}${dllMtime}"
+
+            if [[ -z "${SELECTED_SCORE[$dllKey]+x}" || "$score" -gt "${SELECTED_SCORE[$dllKey]}" ]]; then
+              SELECTED_DLL[$dllKey]="$dllFile"
+              SELECTED_SCORE[$dllKey]="$score"
+            fi
+          done < <(
+            find . -type f -name "*.dll" \
+              ! -iname "*Microsoft*" ! -iname "*UnitTest*" ! -iname "*Xunit*" ! -iname "*Test*" \
+              ! -path "*/obj/*" ! -path "*/ref/*" ! -path "*/refint/*" ! -path "*/node_modules/*" \
+              ! -path "*/.git/*" ! -path "*/TestResults/*" \
+              -print0
+          )
+
+          for dllKey in "${!SELECTED_DLL[@]}"; do
+            dllFile="${SELECTED_DLL[$dllKey]}"
+            pdbFile="${dllFile%.dll}.pdb"
+
+            cp --parents "$dllFile" "$TEMP_DIR"
+            cp --parents "$pdbFile" "$TEMP_DIR"
+
+            for ext in deps.json runtimeconfig.json; do
+              auxFile="${dllFile%.dll}.${ext}"
+              [ -f "$auxFile" ] && cp --parents "$auxFile" "$TEMP_DIR"
+            done
+
+            webConfig="$(dirname "$dllFile")/web.config"
+            [ -f "$webConfig" ] && cp --parents "$webConfig" "$TEMP_DIR"
+          done
+
+          cd "$TEMP_DIR"
+          zip -r "$PACKAGE_PATH" .
+
+          echo "ZIP criado:"
+          ls -lh "$PACKAGE_PATH"
+
+    artifacts:
+        paths:
+            - veracode.zip
+
+
+# Utiliza o SCA para análise de componentes de terceiros
+sca:
+    image: openjdk:8
+    stage: Veracode_Package
+    when: always
+
+    script:
+        - |
+          curl -sSL 'https://download.sourceclear.com/ci.sh' \
+            | bash -s scan --update-advisor --allow-dirty
+
+
+# Realiza o Upload and Scan através do Veracode API Wrapper
+Veracode_UploadAndScan:
+    image: veracode/api-wrapper-java
+    stage: Veracode_Scan
+
+    script:
+        - |
+          java -jar /opt/veracode/api-wrapper.jar \
+            -action UploadAndScan \
+            -vid "${VeracodeID}" \
+            -vkey "${VeracodeKey}" \
+            -appname "${CI_PROJECT_NAME}" \
+            -createprofile true \
+            -autoscan true \
+            -criticality VeryHigh \
+            -filepath veracode.zip \
+            -version "${CI_JOB_ID}"
+
+    dependencies:
+        - packaging
+
+
+# Utiliza o Pipeline Scan para análise rápida e validação da Policy
+pipeline_scan:
+    image: openjdk:8
+    stage: Veracode_Scan
+
+    dependencies:
+        - packaging
+
+    when: always
+
+    script:
+        # Download do Pipeline Scan
+        - |
+          curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip pipeline-scan-LATEST.zip pipeline-scan.jar
+
+        # Download da Policy
+        - |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${VeracodeID}" \
+            --veracode_api_key "${VeracodeKey}" \
+            --request_policy_file "${VeracodePolicyName}"
+
+        # Normaliza o nome da Policy
+        - |
+          VeracodePolicyFile=$(echo "${VeracodePolicyName}" | sed 's/ /_/g')
+          VeracodePolicyFile="${VeracodePolicyFile}.json"
+
+        # Executa o Pipeline Scan utilizando a Policy
+        - |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${VeracodeID}" \
+            --veracode_api_key "${VeracodeKey}" \
+            --file veracode.zip \
+            --gl_issue_generation true \
+            --issue_details true \
+            --policy_file "${VeracodePolicyFile}"

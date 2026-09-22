@@ -1,0 +1,97 @@
+# Definição dos stages
+stages:
+    - Veracode_Package
+    - Veracode_Scan
+
+# Cria o ZIP com os arquivos conforme a documentação da Veracode
+packaging:
+    image: ubuntu:24.04
+    stage: Veracode_Package
+
+    before_script:
+        - apt-get update
+        - apt-get install -y zip
+
+    script:
+        - |
+          zip -r veracode.zip . \
+            -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' \
+            -x '*/node_modules/*' '*/.git/*' '*/dist/*' '*test*' '*Test*' '*TEST*' '*teste*' '*Teste*' '*TESTE*'
+
+    artifacts:
+        paths:
+            - veracode.zip
+
+
+# Utiliza o SCA para fazer a análise de componentes de terceiros
+sca:
+    image: openjdk:8
+    stage: Veracode_Package
+    when: always
+
+    script:
+        - |
+          curl -sSL 'https://download.sourceclear.com/ci.sh' \
+            | bash -s scan --update-advisor --allow-dirty
+
+
+# Inicia a análise SAST/SCA por meio do Wrapper
+Veracode_UploadAndScan:
+    image: veracode/api-wrapper-java
+    stage: Veracode_Scan
+
+    script:
+        - |
+          java -jar /opt/veracode/api-wrapper.jar \
+            -action UploadAndScan \
+            -vid "${VeracodeID}" \
+            -vkey "${VeracodeKey}" \
+            -appname "${CI_PROJECT_NAME}" \
+            -createprofile true \
+            -autoscan true \
+            -criticality VeryHigh \
+            -filepath veracode.zip \
+            -version "${CI_JOB_ID}"
+
+    dependencies:
+        - packaging
+
+
+# Utiliza o Pipeline Scan para uma análise mais rápida
+# e validar quebra por erros encontrados
+pipeline_scan:
+    image: openjdk:8
+    stage: Veracode_Scan
+
+    dependencies:
+        - packaging
+
+    when: always
+
+    script:
+        # Download do Pipeline Scan
+        - |
+          curl -sSO https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip pipeline-scan-LATEST.zip pipeline-scan.jar
+
+        # Download da Policy
+        - |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${VeracodeID}" \
+            --veracode_api_key "${VeracodeKey}" \
+            --request_policy_file "${VeracodePolicyName}"
+
+        # Normaliza o nome da Policy
+        - |
+          VeracodePolicyFile=$(echo "${VeracodePolicyName}" | sed 's/ /_/g')
+          VeracodePolicyFile="${VeracodePolicyFile}.json"
+
+        # Executa o Pipeline Scan utilizando a Policy
+        - |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${VeracodeID}" \
+            --veracode_api_key "${VeracodeKey}" \
+            --file veracode.zip \
+            --gl_issue_generation true \
+            --issue_details true \
+            --policy_file "${VeracodePolicyFile}"
