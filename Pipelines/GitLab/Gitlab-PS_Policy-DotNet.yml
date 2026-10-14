@@ -154,7 +154,7 @@ pipeline_scan:
           java -jar pipeline-scan.jar \
             --veracode_api_id "${VeracodeID}" \
             --veracode_api_key "${VeracodeKey}" \
-            --request_policy_file "${VeracodePolicyName}"
+            --request_policy "${VeracodePolicyName}"
 
         # Normaliza o nome da Policy
         - |
