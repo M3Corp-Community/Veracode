@@ -1,0 +1,138 @@
+pipeline {
+    agent any
+
+    environment {
+        VeracodeProfile = "${env.JOB_NAME}"
+        CaminhoPacote = "veracode.zip"
+        VeracodePolicyName = "Veracode Recommended Medium"
+    }
+
+    stages {
+        stage("Veracode Package") {
+            steps {
+                sh '''
+                    command -v zip >/dev/null 2>&1 || { echo "zip nao encontrado no agente Jenkins"; exit 1; }
+
+                    zip -r "${CaminhoPacote}" . \
+                      -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' \
+                         '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' \
+                         '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' \
+                         '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' \
+                         '*.php' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' 'pyproject.toml' 'Pipfile' \
+                      -x 'node_modules/*' \
+                         '*/node_modules/*' \
+                         '.git/*' \
+                         '*/.git/*' \
+                         'dist/*' \
+                         '*/dist/*' \
+                         '*test*' \
+                         '*Test*' \
+                         '*TEST*' \
+                         '*teste*' \
+                         '*Teste*' \
+                         '*TESTE*'
+                '''
+                archiveArtifacts artifacts: "${CaminhoPacote}", fingerprint: true
+            }
+        }
+
+        stage("Veracode SCA") {
+            steps {
+                withCredentials([string(credentialsId: "veracode-sca-token", variable: "SRCCLR_API_TOKEN")]) {
+                    sh '''
+                        curl -sSL "https://download.sourceclear.com/ci.sh" \
+                          | bash -s scan --update-advisor --allow-dirty
+                    '''
+                }
+            }
+        }
+
+        stage("Veracode IaC") {
+            steps {
+                catchError(buildResult: "SUCCESS", stageResult: "FAILURE") {
+                    withCredentials([usernamePassword(credentialsId: "veracode-credentials", passwordVariable: "VeracodeKey", usernameVariable: "VeracodeID")]) {
+                        sh '''
+                            curl -fsS "https://tools.veracode.com/veracode-cli/install" | sh
+
+                            export VERACODE_API_KEY_ID="${VeracodeID}"
+                            export VERACODE_API_KEY_SECRET="${VeracodeKey}"
+
+                            ORIGINAL_DIR="$(pwd)"
+                            PARENT_DIR="$(dirname "$ORIGINAL_DIR")"
+                            ORIGINAL_NAME="$(basename "$ORIGINAL_DIR")"
+                            PIPELINE_DIR=$(echo "${VeracodeProfile}" | sed "s#[/\\\\]#_#g")
+
+                            restore_project_dir() {
+                                cd "$PARENT_DIR"
+                                if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ] && [ -d "$PIPELINE_DIR" ]; then
+                                    mv "$PIPELINE_DIR" "$ORIGINAL_NAME"
+                                fi
+                            }
+                            trap restore_project_dir EXIT
+
+                            cd "$PARENT_DIR"
+                            if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ]; then
+                                mv "$ORIGINAL_NAME" "$PIPELINE_DIR"
+                            fi
+                            cd "$PIPELINE_DIR"
+                            echo "pasta:$(pwd)"
+
+                            ./veracode scan --type directory --source "$(pwd)" --format table
+
+                            restore_project_dir
+                            trap - EXIT
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage("Veracode Upload And Scan") {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "veracode-credentials", passwordVariable: "VeracodeKey", usernameVariable: "VeracodeID")]) {
+                    sh '''
+                        LATEST_VERSION=$(curl -fsSL "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml" | grep -oPm1 "(?<=<latest>)[^<]+")
+                        curl -fL -o veracode-wrapper.jar "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/${LATEST_VERSION}/vosp-api-wrappers-java-${LATEST_VERSION}.jar"
+
+                        java -jar veracode-wrapper.jar \
+                          -action UploadAndScan \
+                          -vid "${VeracodeID}" \
+                          -vkey "${VeracodeKey}" \
+                          -appname "${VeracodeProfile}" \
+                          -createprofile true \
+                          -autoscan true \
+                          -criticality VeryHigh \
+                          -filepath "${CaminhoPacote}" \
+                          -version "${BUILD_NUMBER}"
+                    '''
+                }
+            }
+        }
+
+        stage("Veracode Pipeline Scan") {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "veracode-credentials", passwordVariable: "VeracodeKey", usernameVariable: "VeracodeID")]) {
+                    sh '''
+                        curl -sSO "https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip"
+                        unzip -o pipeline-scan-LATEST.zip pipeline-scan.jar
+
+                        java -jar pipeline-scan.jar \
+                          --veracode_api_id "${VeracodeID}" \
+                          --veracode_api_key "${VeracodeKey}" \
+                          --request_policy "${VeracodePolicyName}"
+
+                        VeracodePolicyFile=$(echo "${VeracodePolicyName}" | sed "s/ /_/g")
+                        VeracodePolicyFile="${VeracodePolicyFile}.json"
+
+                        java -jar pipeline-scan.jar \
+                          --veracode_api_id "${VeracodeID}" \
+                          --veracode_api_key "${VeracodeKey}" \
+                          --file "${CaminhoPacote}" \
+                          --issue_details true \
+                          --policy_file "${VeracodePolicyFile}"
+                    '''
+                }
+            }
+        }
+    }
+}

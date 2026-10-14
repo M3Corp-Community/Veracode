@@ -1,6 +1,7 @@
 # Definição dos stages
 stages:
     - Veracode_Package
+    - Veracode_Deps_IaC
     - Veracode_Scan
 
 # Cria o ZIP com os arquivos conforme a documentação da Veracode
@@ -15,8 +16,8 @@ packaging:
     script:
         - |
           zip -r veracode.zip . \
-            -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' \
-            -x '*/node_modules/*' '*/.git/*' '*/dist/*' '*test*' '*Test*' '*TEST*' '*teste*' '*Teste*' '*TESTE*'
+            -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' 'pyproject.toml' 'Pipfile' \
+            -x 'node_modules/*' '*/node_modules/*' '.git/*' '*/.git/*' 'dist/*' '*/dist/*' '*test*' '*Test*' '*TEST*' '*teste*' '*Teste*' '*TESTE*'
 
     artifacts:
         paths:
@@ -26,13 +27,53 @@ packaging:
 # Utiliza o SCA para fazer a análise de componentes de terceiros
 sca:
     image: openjdk:8
-    stage: Veracode_Package
+    stage: Veracode_Deps_IaC
     when: always
 
     script:
         - |
           curl -sSL 'https://download.sourceclear.com/ci.sh' \
             | bash -s scan --update-advisor --allow-dirty
+
+
+# Utiliza o Veracode IaC para analisar infraestrutura como codigo
+Veracode_IaC:
+    image: maven:3.9.9-eclipse-temurin-21
+    stage: Veracode_Deps_IaC
+    needs: []
+    when: always
+    allow_failure: true
+
+    script:
+        - curl -fsS https://tools.veracode.com/veracode-cli/install | sh
+        - |
+          export VERACODE_API_KEY_ID="${VeracodeID}"
+          export VERACODE_API_KEY_SECRET="${VeracodeKey}"
+
+          ORIGINAL_DIR="${CI_PROJECT_DIR:-$(pwd)}"
+          PARENT_DIR="$(dirname "$ORIGINAL_DIR")"
+          ORIGINAL_NAME="$(basename "$ORIGINAL_DIR")"
+          PIPELINE_DIR="${CI_PROJECT_NAME}"
+
+          restore_project_dir() {
+            cd "$PARENT_DIR"
+            if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ] && [ -d "$PIPELINE_DIR" ]; then
+              mv "$PIPELINE_DIR" "$ORIGINAL_NAME"
+            fi
+          }
+          trap restore_project_dir EXIT
+
+          cd "$PARENT_DIR"
+          if [ "$ORIGINAL_NAME" != "$PIPELINE_DIR" ]; then
+            mv "$ORIGINAL_NAME" "$PIPELINE_DIR"
+          fi
+          cd "$PIPELINE_DIR"
+          echo "pasta:$(pwd)"
+
+          ./veracode scan --type directory --source "$(pwd)" --format table
+
+          restore_project_dir
+          trap - EXIT
 
 
 # Inicia a análise SAST/SCA por meio do Wrapper
