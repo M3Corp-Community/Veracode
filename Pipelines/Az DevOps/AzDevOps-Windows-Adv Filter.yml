@@ -16,28 +16,105 @@ steps:
     msbuildArgs: '/p:OutputPath=$(build.artifactstagingdirectory)\bin /p:DeployOnBuild=true /p:WebPublishMethod=FileSystem  /p:PrecompileBeforePublish=true /p:EnableUpdateable=false /p:DebugSymbols=true  /p:UseMerge=false /p:DeleteAppCodeCompiledFiles=True /p:DeleteExistingFiles=True  /p:WDPMergeOption=CreateSeparateAssembly /p:UseFixedNames=true'
     msbuildArchitecture: x64
 
-- task: PowerShell@2
-  inputs:
-    targetType: 'inline'
-    script: |
-      $sourcePath = Get-Location
-      $destinationPath = "$(caminhoPacote)"
-      New-Item -Path ".\UploadVeracode" -ItemType Directory
+    displayName: 'Preparar pacote Veracode (Foco em Build Output)'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $ErrorActionPreference = "Stop"
 
-      # Filtrar os arquivos DLL
-      $dllFiles = Get-ChildItem -Path $sourcePath -Filter *.dll -File -Recurse -Exclude "*Microsoft*", "*UnitTest*", "*Xunit*", "*Test*"
+          $sourcePath = (Get-Location).Path
+          $destinationPath = "$(caminhoPacote)"
+          $destDir = Split-Path -Path $destinationPath -Parent
 
-      # Para cada arquivo DLL encontrado, verifique se há um arquivo PDB correspondente
-      foreach ($dllFile in $dllFiles) {
-          $pdbFile = Get-ChildItem -Path $sourcePath -Filter "$($dllFile.BaseName).pdb" -File -Recurse
-          if ($pdbFile) {
-              Move-Item -Path $dllFile.FullName, $pdbFile.FullName -Destination ".\UploadVeracode" -Verbose
+          if (-not (Test-Path -LiteralPath $destDir)) {
+              New-Item -Path $destDir -ItemType Directory -Force | Out-Null
           }
-      }
 
-      Compress-Archive -Path ".\UploadVeracode" -DestinationPath "$destinationPath"
-      Write-Host "Arquivo zip criado com sucesso em: $destinationPath"
-  displayName: 'Criando pacote para analise'
+          $tempDir = Join-Path $env:TEMP ("VeracodeUpload_" + [guid]::NewGuid().ToString())
+          New-Item -Path $tempDir -ItemType Directory -Force | Out-Null
+
+          # 1. Localiza APENAS as pastas 'bin' de cada projeto (sem descer dentro delas ainda)
+          $skipSearchDirs = [System.Collections.Generic.HashSet[string]]::new(
+              [string[]]@('obj', 'ref', 'refint', 'node_modules', '.git', 'TestResults', '.vs', 'packages'),
+              [System.StringComparer]::OrdinalIgnoreCase
+          )
+
+          $binFolders = [System.Collections.Generic.List[System.IO.DirectoryInfo]]::new()
+          $dirStack = [System.Collections.Generic.Stack[System.IO.DirectoryInfo]]::new()
+          $dirStack.Push([System.IO.DirectoryInfo]::new($sourcePath))
+
+          while ($dirStack.Count -gt 0) {
+              $curr = $dirStack.Pop()
+              foreach ($sub in $curr.GetDirectories()) {
+                  if ($sub.Name -ieq 'bin') {
+                      # Encontrou a pasta bin do projeto: guarda e NÃO precisa buscar 'bin' dentro de 'bin'
+                      $binFolders.Add($sub)
+                  }
+                  elseif (-not $skipSearchDirs.Contains($sub.Name)) {
+                      $dirStack.Push($sub)
+                  }
+              }
+          }
+
+          Write-Host "Pastas 'bin' encontradas: $($binFolders.Count)"
+
+          # 2. Coleta binários e metadados SOMENTE dentro das pastas 'bin' encontradas
+          foreach ($binDir in $binFolders) {
+              $binaries = Get-ChildItem -LiteralPath $binDir.FullName -Recurse -File | Where-Object {
+                  ($_.Extension -in @('.dll', '.exe')) -and
+                  ($_.FullName -notmatch '\\(ref|refint)\\') -and
+                  ($_.Name -notlike '*Microsoft*') -and
+                  ($_.Name -notlike '*UnitTest*') -and
+                  ($_.Name -notlike '*Xunit*') -and
+                  ($_.Name -notlike '*Test*')
+              }
+
+              foreach ($binFile in $binaries) {
+                  $pdbFile = Join-Path $binFile.DirectoryName "$($binFile.BaseName).pdb"
+
+                  # Exige o par PDB para garantir que é código compilado da aplicação (first-party)
+                  if (Test-Path -LiteralPath $pdbFile) {
+                      $relDir = $binFile.DirectoryName.Substring($sourcePath.Length).TrimStart('\')
+                      $targetSubDir = if ([string]::IsNullOrEmpty($relDir)) { $tempDir } else { Join-Path $tempDir $relDir }
+
+                      if (-not (Test-Path -LiteralPath $targetSubDir)) {
+                          New-Item -Path $targetSubDir -ItemType Directory -Force | Out-Null
+                      }
+
+                      Copy-Item -LiteralPath $binFile.FullName -Destination $targetSubDir -Force
+                      Copy-Item -LiteralPath $pdbFile -Destination $targetSubDir -Force
+
+                      # Metadados de dependências e runtime (.NET Core / .NET 5+)
+                      foreach ($ext in @('deps.json', 'runtimeconfig.json')) {
+                          $auxFile = Join-Path $binFile.DirectoryName "$($binFile.BaseName).$ext"
+                          if (Test-Path -LiteralPath $auxFile) {
+                              Copy-Item -LiteralPath $auxFile -Destination $targetSubDir -Force
+                          }
+                      }
+
+                      # Configuração web se presente
+                      $webConfig = Join-Path $binFile.DirectoryName 'web.config'
+                      if (Test-Path -LiteralPath $webConfig) {
+                          Copy-Item -LiteralPath $webConfig -Destination $targetSubDir -Force
+                      }
+                  }
+              }
+          }
+
+          if ((Get-ChildItem -Path $tempDir -Recurse -File).Count -eq 0) {
+              Write-Warning "Nenhum par DLL/EXE + PDB válido foi encontrado nas pastas 'bin'."
+              exit 1
+          }
+
+          if (Test-Path -LiteralPath $destinationPath) {
+              Remove-Item -LiteralPath $destinationPath -Force
+          }
+
+          Compress-Archive -Path "$tempDir\*" -DestinationPath $destinationPath -CompressionLevel Optimal
+          Remove-Item -LiteralPath $tempDir -Recurse -Force
+
+          Write-Host "ZIP criado com sucesso em: $destinationPath"
+          Get-Item -LiteralPath $destinationPath | Select-Object Name, @{Name="SizeKB";Expression={[math]::Round($_.Length / 1KB, 2)}}
 
 - task: PowerShell@2
   inputs:
