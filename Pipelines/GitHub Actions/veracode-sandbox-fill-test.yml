@@ -1,0 +1,119 @@
+name: Veracode Sandbox Fill Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      sandbox_name:
+        description: 'Nome opcional da sandbox de teste (o padrão inclui o número da execução)'
+        required: false
+        type: string
+
+env:
+  APP_NAME: "Github Actions - ${{ github.repository }}"
+  SANDBOX_LIMIT: 9
+  PACKAGE_PATH: veracode.zip
+
+concurrency:
+  group: veracode-sandbox-rotation-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  create-test-sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Preparar pacote Veracode (ZIP otimizado)
+        run: |
+          zip -r "${{ env.PACKAGE_PATH }}" . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' 'pyproject.toml' 'Pipfile' 'Pipfile.lock' 'composer.lock' '*.cs' '*.cshtml' '*.razor' '*.csproj' '*.sln' '*.slnx' '*.props' '*.targets' '*.config' '*.deps.json' '*.asset.json' '*.cob' '*.cbl' '*.cobol' '*.pco' '*.cpy' '*.cls' '*.trg' '*.tgr' '*.trigger' '*.pks' '*.pkb' '*.vfp' '*.cmp' '*.component' '*.evt' '*.app' '*.page' '*.fnc' '*.pck' '*.pls' '*.prc' '*.sql' '*.tpb' '*.tps' '*.vw' '*.bas' '*.frm' '*.frx' '*.ctl' '*.ctx' '*.vbp' '*.vbg' '*.vb' '*.vbs' '*.asa' '*.grp' '*.ocx' '*.rpg' '*.rpg4' '*.rpgle' '*.pf' '*.lf' '*.dspf' '*.prt' '*.icf' '*.sc' '*.scala' '*.groovy' '*.gvy' '*.gy' '*.gsh' '*.pl' '*.pm' '*.plx' '*.pl5' '*.cgi' '*.go' 'go.mod' 'go.sum' 'veracode.json' -x 'node_modules/*' '*/node_modules/*' '.git/*' '*/.git/*' 'dist/*' '*/dist/*' 'bin/*' '*/bin/*' 'obj/*' '*/obj/*' 'packages/*' '*/packages/*' '.vscode/*' '*/.vscode/*' '.idea/*' '*/.idea/*' '*/test/*' '*/tests/*' '*/__tests__/*' '*_test.*' '*_spec.*' '*Test.*' '*Tests.*'
+          test -s "${{ env.PACKAGE_PATH }}"
+          ls -lh "${{ env.PACKAGE_PATH }}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Veracode API Wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata_url="https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml"
+          version="$(curl --fail --silent --show-error --location "$metadata_url" | grep -oPm1 '(?<=<latest>)[^<]+')"
+          test -n "$version"
+          curl --fail --silent --show-error --location --output veracode-wrapper.jar \
+            "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/$version/vosp-api-wrappers-java-$version.jar"
+          test -s veracode-wrapper.jar
+          java -jar veracode-wrapper.jar -wrapperversion
+
+      - name: Preencher sandboxes de teste até o limite
+        env:
+          VERACODE_API_ID: ${{ secrets.VERACODE_API_ID }}
+          VERACODE_API_KEY: ${{ secrets.VERACODE_API_KEY }}
+          APP_NAME: ${{ env.APP_NAME }}
+          SANDBOX_LIMIT: ${{ env.SANDBOX_LIMIT }}
+          PACKAGE_PATH: ${{ env.PACKAGE_PATH }}
+          SANDBOX_PREFIX: ${{ inputs.sandbox_name || format('rotation-test-{0}', github.run_number) }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          import sys
+          import xml.etree.ElementTree as ET
+
+          def call(action, **params):
+              args = ["java", "-jar", "veracode-wrapper.jar", "-vid", os.environ["VERACODE_API_ID"], "-vkey", os.environ["VERACODE_API_KEY"], "-action", action]
+              for key, value in params.items():
+                  args.extend([f"-{key}", str(value)])
+              result = subprocess.run(args, text=True, capture_output=True)
+              output = result.stdout.strip()
+              if result.returncode or "<error" in output.lower():
+                  sys.exit(f"Veracode {action} falhou: {(result.stderr or output).strip()}")
+              try:
+                  return ET.fromstring(output)
+              except ET.ParseError as exc:
+                  sys.exit(f"Resposta inválida de {action}: {exc}")
+
+          def elements(root, tag):
+              return [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == tag]
+
+          apps = elements(call("getapplist"), "app")
+          app = next((item for item in apps if item.get("app_name") == os.environ["APP_NAME"]), None)
+          if app is None:
+              sys.exit(f"Perfil '{os.environ['APP_NAME']}' não encontrado; nenhum scan foi enviado.")
+          sandboxes = elements(call("getsandboxlist", appid=app.get("app_id")), "sandbox")
+          current = len(sandboxes)
+          limit = int(os.environ["SANDBOX_LIMIT"])
+          missing = max(0, limit - current)
+          print(f"Sandboxes atuais: {current}/{limit}; serão enviados {missing} scans.", flush=True)
+
+          for index in range(1, missing + 1):
+              sandbox_name = f"{os.environ['SANDBOX_PREFIX']}-{index}"
+              version = f"rotation-test-{os.environ['RUN_ID']}-{index}"
+              print(f"Enviando scan {index}/{missing} para '{sandbox_name}'.", flush=True)
+              result = subprocess.run(
+                  [
+                      "java", "-jar", "veracode-wrapper.jar",
+                      "-vid", os.environ["VERACODE_API_ID"],
+                      "-vkey", os.environ["VERACODE_API_KEY"],
+                      "-action", "uploadandscan",
+                      "-appname", os.environ["APP_NAME"],
+                      "-createprofile", "true",
+                      "-createsandbox", "true",
+                      "-sandboxname", sandbox_name,
+                      "-filepath", os.environ["PACKAGE_PATH"],
+                      "-deleteincompletescan", "0",
+                      "-version", version,
+                  ],
+                  text=True,
+                  capture_output=True,
+              )
+              if result.stdout:
+                  print(result.stdout.strip(), flush=True)
+              if result.returncode != 0 or "<error" in result.stdout.lower():
+                  detail = (result.stderr or result.stdout or "sem detalhes").strip()
+                  sys.exit(f"UploadAndScan falhou para '{sandbox_name}': {detail}")
+          PY
