@@ -1,0 +1,119 @@
+trigger:
+- master
+
+variables:
+- group: Veracode
+- name: caminhoPacote
+  value: '$(Build.ArtifactStagingDirectory)\veracode-package.zip'
+- name: veracodeTeams
+  value: 'DEMOs'
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+- task: PowerShell@2
+  displayName: 'Preparar pacote Veracode unificado'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $ErrorActionPreference = "Stop"
+
+      $sourcePath = (Get-Location).Path
+      $destPath = "$(caminhoPacote)"
+      $destDir = Split-Path -Path $destPath -Parent
+
+      if (-not [string]::IsNullOrWhiteSpace($destDir) -and -not (Test-Path -LiteralPath $destDir)) {
+        New-Item -Path $destDir -ItemType Directory -Force | Out-Null
+      }
+
+      if (Test-Path -LiteralPath $destPath) {
+        Remove-Item -LiteralPath $destPath -Force
+      }
+
+      $tempDir = Join-Path $env:TEMP ("VeracodeZip_" + [guid]::NewGuid().ToString())
+      New-Item -Path $tempDir -ItemType Directory -Force | Out-Null
+
+      $includePatterns = @(
+        '*.py', '*.html', '*.htm', '*.asp', '*.cjs', '*.css', '*.ehtml', '*.es', '*.es6',
+        '*.handlebars', '*.hbs', '*.hjs', '*.js', '*.jsx', '*.json', '*.jsp', '*.jspx',
+        '*.java', '*.map', '*.mjs', '*.mustache', '*.ts', '*.tsx', '*.vue', '*.xhtml',
+        '*.lock', '*.module', '*.inc', '*.profile', '*.install', '*.engine', '*.theme',
+        '*.php', '*.php4', '*.php5', '*.php7', '*.phtml', '*.txt',
+        'pyproject.toml', 'Pipfile', 'Pipfile.lock', 'composer.lock',
+        '*.cs', '*.cshtml', '*.razor', '*.csproj', '*.sln', '*.slnx', '*.props', '*.targets',
+        '*.config', '*.deps.json', '*.asset.json',
+        '*.cob', '*.cbl', '*.cobol', '*.pco', '*.cpy',
+        '*.cls', '*.trg', '*.tgr', '*.trigger', '*.pks', '*.pkb', '*.vfp', '*.cmp',
+        '*.component', '*.evt', '*.app', '*.page', '*.fnc', '*.pck', '*.pls', '*.prc',
+        '*.sql', '*.tpb', '*.tps', '*.vw',
+        '*.bas', '*.frm', '*.frx', '*.ctl', '*.ctx', '*.vbp', '*.vbg', '*.vb', '*.vbs',
+        '*.asa', '*.grp', '*.ocx',
+        '*.rpg', '*.rpg4', '*.rpgle', '*.pf', '*.lf', '*.dspf', '*.prt', '*.icf',
+        '*.sc', '*.scala', '*.groovy', '*.gvy', '*.gy', '*.gsh',
+        '*.pl', '*.pm', '*.plx', '*.pl5', '*.cgi', '*.go',
+        'go.mod', 'go.sum', 'veracode.json'
+      )
+
+      $excludeDirsRegex = '\\(node_modules|\.git|dist|bin|obj|packages|\.vscode|\.idea|test|tests|__tests__)\\'
+      $excludeTestFilesRegex = '(_test\.|_spec\.|Test\.|Tests\.)'
+
+      Write-Host "Diretorio base: $sourcePath"
+      Write-Host "Destino do ZIP: $destPath"
+
+      $matchedFiles = @(
+        Get-ChildItem -LiteralPath $sourcePath -File -Recurse | Where-Object {
+          if ($_.FullName -match $excludeDirsRegex) { return $false }
+          if ($_.Name -match $excludeTestFilesRegex) { return $false }
+
+          foreach ($pat in $includePatterns) {
+            if ($_.Name -like $pat) { return $true }
+          }
+          return $false
+        }
+      )
+
+      Write-Host "Arquivos selecionados para o ZIP: $($matchedFiles.Count)"
+      foreach ($file in $matchedFiles) {
+        $relPath = $file.FullName.Substring($sourcePath.Length).TrimStart('\')
+        $sizeKB = [math]::Round($file.Length / 1KB, 2)
+        Write-Host "  + $relPath ($sizeKB KB)"
+
+        $targetFile = Join-Path $tempDir $relPath
+        $targetParent = Split-Path -Path $targetFile -Parent
+        if (-not (Test-Path -LiteralPath $targetParent)) {
+          New-Item -Path $targetParent -ItemType Directory -Force | Out-Null
+        }
+        Copy-Item -LiteralPath $file.FullName -Destination $targetFile -Force
+      }
+
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      [System.IO.Compression.ZipFile]::CreateFromDirectory($tempDir, $destPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+      Remove-Item -LiteralPath $tempDir -Recurse -Force
+
+      Write-Host ""
+      Write-Host "ZIP criado:"
+      Get-Item -LiteralPath $destPath | Select-Object FullName, @{Name="SizeMB";Expression={[math]::Round($_.Length / 1MB, 2)}}, @{Name="SizeKB";Expression={[math]::Round($_.Length / 1KB, 2)}}
+
+- task: PowerShell@2
+  displayName: 'Download Veracode Wrapper'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $ErrorActionPreference = "Stop"
+      $xml = curl.exe -fsSL "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml"
+      $latestVersion = ([xml]$xml).metadata.versioning.latest
+      if ([string]::IsNullOrWhiteSpace($latestVersion)) {
+        throw "Não foi possível obter a versão mais recente em maven-metadata.xml."
+      }
+      curl.exe -fsSL -o "veracode-wrapper.jar" "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/$latestVersion/vosp-api-wrappers-java-$latestVersion.jar"
+
+- powershell: |
+    $branch = "$(Build.SourceBranchName)"
+    if ($branch -eq "main" -or $branch -eq "master") {
+      java -jar veracode-wrapper.jar -vid "$(APIID)" -vkey "$(APIKEY)" -action uploadandscan -appname "$(veracodeAppProfile)" -createprofile true -version "$(Build.BuildNumber)" -filepath "$(caminhoPacote)" -deleteincompletescan 2 -teams "$(veracodeTeams)"
+    } else {
+      java -jar veracode-wrapper.jar -vid "$(APIID)" -vkey "$(APIKEY)" -action uploadandscan -appname "$(veracodeAppProfile)" -createprofile true -version "$(Build.BuildNumber)" -filepath "$(caminhoPacote)" -createsandbox true -sandboxname "$branch" -deleteincompletescan 2 -teams "$(veracodeTeams)"
+    }
+  displayName: 'Veracode U&S'
+  continueOnError: true

@@ -1,0 +1,218 @@
+name: Veracode Sandbox Rotation & Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      sandbox_name:
+        description: 'Nome da Sandbox (deixe vazio para usar o nome da branch atual)'
+        required: false
+        type: string
+
+env:
+  APP_NAME: "Github Actions - ${{ github.repository }}"
+  SANDBOX_THRESHOLD: 9 # Abre espaço antes de criar a 10ª sandbox
+  PACKAGE_PATH: "veracode.zip"
+
+concurrency:
+  group: veracode-sandbox-rotation-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  veracode-sandbox-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Preparar pacote Veracode (ZIP otimizado)
+        run: |
+          zip -r "${{ env.PACKAGE_PATH }}" . -i '*.py' '*.html' '*.htm' '*.asp' '*.cjs' '*.css' '*.ehtml' '*.es' '*.es6' '*.handlebars' '*.hbs' '*.hjs' '*.js' '*.jsx' '*.json' '*.jsp' '*.jspx' '*.java' '*.map' '*.mjs' '*.mustache' '*.ts' '*.tsx' '*.vue' '*.xhtml' '*.lock' '*.module' '*.inc' '*.profile' '*.install' '*.engine' '*.theme' '*.php' '*.php4' '*.php5' '*.php7' '*.phtml' '*.txt' 'pyproject.toml' 'Pipfile' 'Pipfile.lock' 'composer.lock' '*.cs' '*.cshtml' '*.razor' '*.csproj' '*.sln' '*.slnx' '*.props' '*.targets' '*.config' '*.deps.json' '*.asset.json' '*.cob' '*.cbl' '*.cobol' '*.pco' '*.cpy' '*.cls' '*.trg' '*.tgr' '*.trigger' '*.pks' '*.pkb' '*.vfp' '*.cmp' '*.component' '*.evt' '*.app' '*.page' '*.fnc' '*.pck' '*.pls' '*.prc' '*.sql' '*.tpb' '*.tps' '*.vw' '*.bas' '*.frm' '*.frx' '*.ctl' '*.ctx' '*.vbp' '*.vbg' '*.vb' '*.vbs' '*.asa' '*.grp' '*.ocx' '*.rpg' '*.rpg4' '*.rpgle' '*.pf' '*.lf' '*.dspf' '*.prt' '*.icf' '*.sc' '*.scala' '*.groovy' '*.gvy' '*.gy' '*.gsh' '*.pl' '*.pm' '*.plx' '*.pl5' '*.cgi' '*.go' 'go.mod' 'go.sum' 'veracode.json' -x 'node_modules/*' '*/node_modules/*' '.git/*' '*/.git/*' 'dist/*' '*/dist/*' 'bin/*' '*/bin/*' 'obj/*' '*/obj/*' 'packages/*' '*/packages/*' '.vscode/*' '*/.vscode/*' '.idea/*' '*/.idea/*' '*/test/*' '*/tests/*' '*/__tests__/*' '*_test.*' '*_spec.*' '*Test.*' '*Tests.*'
+          ls -lh "${{ env.PACKAGE_PATH }}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Veracode API Wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          metadata_url="https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/maven-metadata.xml"
+          version="$(curl --fail --silent --show-error --location "$metadata_url" | grep -oPm1 '(?<=<latest>)[^<]+')"
+          test -n "$version"
+          curl --fail --silent --show-error --location \
+            --output veracode-wrapper.jar \
+            "https://repo1.maven.org/maven2/com/veracode/vosp/api/wrappers/vosp-api-wrappers-java/$version/vosp-api-wrappers-java-$version.jar"
+          test -s veracode-wrapper.jar
+          java -jar veracode-wrapper.jar -wrapperversion
+
+      - name: Verificar limite e rotacionar sandbox
+        env:
+          VERACODE_API_ID: ${{ secrets.VERACODE_API_ID }}
+          VERACODE_API_KEY: ${{ secrets.VERACODE_API_KEY }}
+          APP_NAME: ${{ env.APP_NAME }}
+          SANDBOX_THRESHOLD: ${{ env.SANDBOX_THRESHOLD }}
+          TARGET_SANDBOX: ${{ inputs.sandbox_name || github.ref_name }}
+        run: |
+          python3 - << 'PY'
+          import os
+          import subprocess
+          import sys
+          import time
+          import xml.etree.ElementTree as ET
+
+          wrapper = "veracode-wrapper.jar"
+          vid = os.environ["VERACODE_API_ID"].strip()
+          vkey = os.environ["VERACODE_API_KEY"].strip()
+          app_name = os.environ["APP_NAME"]
+          target_name = os.environ["TARGET_SANDBOX"]
+          threshold = int(os.environ["SANDBOX_THRESHOLD"])
+
+          if not vid or not vkey:
+              sys.exit("Configure os secrets VERACODE_API_ID e VERACODE_API_KEY.")
+
+          def call(action, **params):
+              command = ["java", "-jar", wrapper, "-vid", vid, "-vkey", vkey, "-action", action]
+              for name, value in params.items():
+                  command.extend([f"-{name}", str(value)])
+              result = subprocess.run(command, text=True, capture_output=True)
+              output = result.stdout.strip()
+              if result.returncode != 0 or "<error" in output.lower():
+                  detail = (result.stderr or output or "sem detalhes").strip()
+                  sys.exit(f"Veracode {action} falhou: {detail}")
+              try:
+                  return ET.fromstring(output)
+              except ET.ParseError as error:
+                  sys.exit(f"Resposta inesperada do wrapper em {action}: {error}")
+
+          def elements(root, name):
+              return [item for item in root.iter() if item.tag.rsplit("}", 1)[-1] == name]
+
+          def list_sandboxes(app_id):
+              return elements(call("getsandboxlist", appid=app_id), "sandbox")
+
+          apps = elements(call("getapplist"), "app")
+          app = next((item for item in apps if item.get("app_name") == app_name), None)
+          if app is None:
+              print(f"Perfil '{app_name}' ainda não existe; UploadAndScan vai criá-lo.")
+              sys.exit(0)
+
+          app_id = app.get("app_id")
+          sandboxes = list_sandboxes(app_id)
+
+          # Sandboxes sem nenhum build não têm scan que possa ser promovido; remova-as primeiro.
+          builds_by_sandbox = {}
+          empty_sandboxes = []
+          for sandbox in sandboxes:
+              sandbox_id = sandbox.get("sandbox_id")
+              sandbox_name = sandbox.get("sandbox_name", "(sem nome)")
+              if not sandbox_id:
+                  sys.exit(f"A sandbox '{sandbox_name}' não trouxe sandbox_id; não é seguro continuar.")
+              builds = elements(
+                  call("getbuildlist", appid=app_id, sandboxid=sandbox_id),
+                  "build"
+              )
+              if builds:
+                  builds_by_sandbox[sandbox_id] = builds
+              else:
+                  empty_sandboxes.append((sandbox_id, sandbox_name))
+
+          for sandbox_id, sandbox_name in empty_sandboxes:
+              print(f"'{sandbox_name}' está vazia; removendo sem promoção.")
+              call("deletesandbox", sandboxid=sandbox_id)
+
+          if empty_sandboxes:
+              sandboxes = list_sandboxes(app_id)
+              remaining_ids = {item.get("sandbox_id") for item in sandboxes}
+              if any(sandbox_id in remaining_ids for sandbox_id, _ in empty_sandboxes):
+                  sys.exit("A Veracode não confirmou a remoção das sandboxes vazias.")
+
+          print(f"{len(sandboxes)} sandboxes após remover as vazias no perfil '{app_name}'.")
+
+          if any(item.get("sandbox_name") == target_name for item in sandboxes):
+              print(f"Sandbox '{target_name}' já existe; nenhuma rotação necessária.")
+              sys.exit(0)
+
+          if len(sandboxes) < threshold:
+              print(f"Abaixo do limite de {threshold}; nenhuma rotação necessária.")
+              sys.exit(0)
+
+          if not sandboxes:
+              sys.exit("A API retornou uma lista vazia de sandboxes.")
+
+          selected = None
+          for candidate in sorted(sandboxes, key=lambda item: item.get("last_modified", "")):
+              candidate_id = candidate.get("sandbox_id")
+              candidate_name = candidate.get("sandbox_name")
+              if not candidate_id or not candidate_name or not candidate.get("last_modified"):
+                  print("Sandbox sem identificadores/data; ignorada.")
+                  continue
+
+              builds = builds_by_sandbox.get(candidate_id, [])
+              if not builds:
+                  print(f"'{candidate_name}' não tem builds disponíveis; pulando.")
+                  continue
+
+              latest = max(
+                  builds,
+                  key=lambda item: (
+                      item.get("policy_updated_date", ""),
+                      int(item.get("build_id", "0"))
+                  )
+              )
+              candidate_build_id = latest.get("build_id")
+              if not candidate_build_id:
+                  print(f"'{candidate_name}' não retornou build_id; pulando.")
+                  continue
+
+              build_info = call(
+                  "getbuildinfo",
+                  appid=app_id,
+                  sandboxid=candidate_id,
+                  buildid=candidate_build_id
+              )
+              latest_build = next(iter(elements(build_info, "build")), None)
+              if latest_build is None or latest_build.get("results_ready", "false").lower() != "true":
+                  print(f"A análise mais recente de '{candidate_name}' não está pronta; pulando.")
+                  continue
+
+              selected = (candidate, candidate_id, candidate_name, candidate_build_id)
+              break
+
+          if selected is None:
+              sys.exit("Nenhuma sandbox tem análise concluída para promover; nenhuma foi excluída.")
+
+          oldest, sandbox_id, sandbox_name, build_id = selected
+
+          print(f"Promovendo '{sandbox_name}' (build {build_id}) para policy.")
+          promotion = call("promotesandbox", buildid=build_id)
+          promoted = next(iter(elements(promotion, "sandbox")), None)
+          if promoted is None or promoted.get("sandbox_status") != "policy":
+              sys.exit("A Veracode não confirmou a promoção; sandbox preservada.")
+
+          call("deletesandbox", sandboxid=sandbox_id)
+          deadline = time.time() + 60
+          while time.time() < deadline:
+              if not any(item.get("sandbox_id") == sandbox_id for item in list_sandboxes(app_id)):
+                  print(f"'{sandbox_name}' promovida e removida; vaga liberada.")
+                  break
+              time.sleep(5)
+          else:
+              sys.exit(f"'{sandbox_name}' foi promovida, mas não foi removida dentro de 60 segundos.")
+          PY
+      - name: UploadAndScan SBs
+        uses: veracode/veracode-uploadandscan-action@master
+        with:
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          appname: ${{ env.APP_NAME }}
+          createprofile: true
+          criticality: 'VeryHigh'
+          createsandbox: true
+          sandboxname: ${{ inputs.sandbox_name || github.ref_name }}
+          filepath: ${{ env.PACKAGE_PATH }}
+          deleteincompletescan: 0
+          version: ${{ github.run_id }}
